@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#17251a">
+  <title>Blockland Survival</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="game"></div>
+
+  <section id="menu" class="overlay">
+    <div class="menu-panel">
+      <p class="eyebrow">PROTOTIPO DE SOBREVIVENCIA</p>
+      <h1>BLOCKLAND</h1>
+      <p class="subtitle">Explore, colete recursos e sobreviva aos infectados.</p>
+      <button id="play-button" type="button">JOGAR</button>
+      <div class="controls">
+        <span><b>WASD</b> mover</span>
+        <span><b>Mouse</b> olhar</span>
+        <span><b>Shift</b> correr</span>
+        <span><b>E</b> coletar</span>
+        <span><b>F</b> usar</span>
+        <span><b>1-5</b> itens</span>
+      </div>
+    </div>
+  </section>
+
+  <div id="hud" class="hidden">
+    <div id="status-bars">
+      <div class="status"><span>VIDA</span><div><i id="health-bar"></i></div><b id="health-value">100</b></div>
+      <div class="status"><span>FOME</span><div><i id="hunger-bar"></i></div><b id="hunger-value">100</b></div>
+      <div class="status"><span>SEDE</span><div><i id="thirst-bar"></i></div><b id="thirst-value">100</b></div>
+      <div class="status"><span>ENERGIA</span><div><i id="stamina-bar"></i></div><b id="stamina-value">100</b></div>
+    </div>
+    <div id="objective">Encontre suprimentos e sobreviva</div>
+    <div id="crosshair"></div>
+    <div id="interaction"></div>
+    <div id="message"></div>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="hurt"></div>
+
+  <section id="game-over" class="overlay hidden">
+    <div class="menu-panel compact">
+      <p class="eyebrow">VOCE NAO SOBREVIVEU</p>
+      <h2>FIM DE JOGO</h2>
+      <p id="final-score"></p>
+      <button id="restart-button" type="button">TENTAR NOVAMENTE</button>
+    </div>
+  </section>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

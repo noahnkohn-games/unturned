@@ -25,6 +25,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 gameRoot.appendChild(renderer.domElement);
 
 const controls = new PointerLockControls(camera, renderer.domElement);
+scene.add(camera);
 const clock = new THREE.Clock();
 const raycaster = new THREE.Raycaster();
 raycaster.far = 3.4;
@@ -42,7 +43,8 @@ let messageTimer = 0;
 let elapsed = 0;
 let attackCooldown = 0;
 let zombieSpawnTimer = 12;
-let yawBob = 0;
+let itemAction = 0;
+let equippedView = null;
 
 const state = {
   health: 100,
@@ -73,8 +75,80 @@ const materials = {
   zombiePants: new THREE.MeshLambertMaterial({ color: 0x343b3e })
 };
 
+const viewMaterials = {
+  skin: new THREE.MeshBasicMaterial({ color: 0xd6a071, depthTest: false }),
+  sleeve: new THREE.MeshBasicMaterial({ color: 0x486945, depthTest: false }),
+  wood: new THREE.MeshBasicMaterial({ color: 0x70472c, depthTest: false }),
+  metal: new THREE.MeshBasicMaterial({ color: 0x9aa3a6, depthTest: false }),
+  water: new THREE.MeshBasicMaterial({ color: 0x56b8df, transparent: true, opacity: 0.85, depthTest: false }),
+  food: new THREE.MeshBasicMaterial({ color: 0xb94e3d, depthTest: false }),
+  stone: new THREE.MeshBasicMaterial({ color: 0x747a76, depthTest: false })
+};
+
+const viewModel = new THREE.Group();
+viewModel.position.set(0.64, -0.64, -1.05);
+camera.add(viewModel);
+
 function terrainHeight(x, z) {
   return Math.sin(x * 0.055) * 1.4 + Math.cos(z * 0.045) * 1.1 + Math.sin((x + z) * 0.025) * 0.8;
+}
+
+function viewMesh(geometry, material) {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 100;
+  return mesh;
+}
+
+function createViewModel() {
+  const arm = viewMesh(new THREE.BoxGeometry(0.22, 0.22, 0.78), viewMaterials.sleeve);
+  arm.position.set(0.08, -0.08, 0.2);
+  arm.rotation.x = -0.42;
+  const hand = viewMesh(new THREE.BoxGeometry(0.24, 0.24, 0.3), viewMaterials.skin);
+  hand.position.set(0.08, 0.08, -0.25);
+  viewModel.add(arm, hand);
+  updateEquippedView();
+}
+
+function createHeldItem(id) {
+  const group = new THREE.Group();
+  if (id === "axe") {
+    const handle = viewMesh(new THREE.BoxGeometry(0.09, 0.09, 0.85), viewMaterials.wood);
+    handle.rotation.x = -0.2;
+    const blade = viewMesh(new THREE.BoxGeometry(0.42, 0.32, 0.1), viewMaterials.metal);
+    blade.position.set(-0.14, 0.07, -0.4);
+    group.add(handle, blade);
+    group.rotation.set(-0.2, 0.1, 0.22);
+  } else if (id === "water") {
+    const bottle = viewMesh(new THREE.CylinderGeometry(0.12, 0.14, 0.48, 8), viewMaterials.water);
+    bottle.rotation.x = Math.PI / 2;
+    const cap = viewMesh(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 8), viewMaterials.metal);
+    cap.rotation.x = Math.PI / 2;
+    cap.position.z = -0.27;
+    group.add(bottle, cap);
+  } else if (id === "food") {
+    const can = viewMesh(new THREE.CylinderGeometry(0.17, 0.17, 0.32, 12), viewMaterials.food);
+    can.rotation.x = Math.PI / 2;
+    group.add(can);
+  } else if (id === "wood") {
+    const log = viewMesh(new THREE.BoxGeometry(0.26, 0.26, 0.65), viewMaterials.wood);
+    log.rotation.x = -0.25;
+    group.add(log);
+  } else if (id === "stone") {
+    const rock = viewMesh(new THREE.DodecahedronGeometry(0.23, 0), viewMaterials.stone);
+    group.add(rock);
+  }
+  group.position.set(0.02, 0.15, -0.48);
+  group.traverse((child) => {
+    if (child.isMesh) child.frustumCulled = false;
+  });
+  return group;
+}
+
+function updateEquippedView() {
+  if (equippedView) viewModel.remove(equippedView);
+  const item = selectedItem();
+  equippedView = item && item.count > 0 ? createHeldItem(item.id) : null;
+  if (equippedView) viewModel.add(equippedView);
 }
 
 function addLights() {
@@ -265,6 +339,7 @@ function renderHotbar() {
       <div class="slot-name">${item.name}</div>
     </div>
   `).join("");
+  updateEquippedView();
 }
 
 function updateHud() {
@@ -307,7 +382,7 @@ function attack() {
   if (!controls.isLocked || gameEnded || attackCooldown > 0) return;
   const item = selectedItem();
   attackCooldown = 0.48;
-  yawBob = 1;
+  itemAction = 1;
   if (item.id !== "axe") {
     showMessage("Equipe o machado para atacar");
     return;
@@ -340,10 +415,12 @@ function useSelected() {
   if (!controls.isLocked || gameEnded) return;
   const item = selectedItem();
   if (item.id === "water" && item.count > 0) {
+    itemAction = 1;
     item.count -= 1;
     state.thirst = Math.min(100, state.thirst + 38);
     showMessage("Voce bebeu agua");
   } else if (item.id === "food" && item.count > 0) {
+    itemAction = 1;
     item.count -= 1;
     state.hunger = Math.min(100, state.hunger + 34);
     state.health = Math.min(100, state.health + 5);
@@ -392,8 +469,13 @@ function resolveCollision(nextPosition) {
 
 function updatePlayer(delta) {
   if (!controls.isLocked || gameEnded) return;
-  const forward = Number(keys.KeyW || keys.ArrowUp) - Number(keys.KeyS || keys.ArrowDown);
-  const sideways = Number(keys.KeyD || keys.ArrowRight) - Number(keys.KeyA || keys.ArrowLeft);
+  let forward = Number(keys.KeyW || keys.ArrowUp) - Number(keys.KeyS || keys.ArrowDown);
+  let sideways = Number(keys.KeyD || keys.ArrowRight) - Number(keys.KeyA || keys.ArrowLeft);
+  const inputLength = Math.hypot(forward, sideways);
+  if (inputLength > 1) {
+    forward /= inputLength;
+    sideways /= inputLength;
+  }
   const running = (keys.ShiftLeft || keys.ShiftRight) && state.stamina > 1 && forward > 0;
   const moving = forward !== 0 || sideways !== 0;
   const speed = running ? 10.5 : 6.2;
@@ -471,11 +553,23 @@ function animateObjects(delta) {
     item.rotation.y += delta * 1.4;
     item.position.y = item.userData.baseY + Math.sin(elapsed * 2.5 + index) * 0.12;
   });
-  if (yawBob > 0) {
-    camera.rotation.z = Math.sin((1 - yawBob) * Math.PI) * -0.04;
-    yawBob = Math.max(0, yawBob - delta * 4);
+  const moving = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD
+    || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
+  const walkX = controls.isLocked && moving ? Math.sin(elapsed * 9) * 0.018 : 0;
+  const walkY = controls.isLocked && moving ? Math.abs(Math.cos(elapsed * 9)) * 0.016 : 0;
+  if (itemAction > 0) {
+    const progress = 1 - itemAction;
+    const swing = Math.sin(progress * Math.PI);
+    viewModel.rotation.set(-swing * 0.65, swing * 0.2, -swing * 0.5);
+    viewModel.position.set(0.64 - swing * 0.18, -0.64 + swing * 0.12, -1.05 + swing * 0.18);
+    itemAction = Math.max(0, itemAction - delta * 3.6);
   } else {
-    camera.rotation.z *= 0.8;
+    viewModel.rotation.x *= 0.78;
+    viewModel.rotation.y *= 0.78;
+    viewModel.rotation.z *= 0.78;
+    viewModel.position.x = THREE.MathUtils.lerp(viewModel.position.x, 0.64 + walkX, 0.18);
+    viewModel.position.y = THREE.MathUtils.lerp(viewModel.position.y, -0.64 + walkY, 0.18);
+    viewModel.position.z = THREE.MathUtils.lerp(viewModel.position.z, -1.05, 0.18);
   }
 }
 
@@ -521,6 +615,9 @@ renderer.domElement.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+    event.preventDefault();
+  }
   keys[event.code] = true;
   if (/^Digit[1-5]$/.test(event.code)) {
     state.selected = Number(event.code.slice(-1)) - 1;
@@ -533,6 +630,9 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("keyup", (event) => {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+    event.preventDefault();
+  }
   keys[event.code] = false;
 });
 
@@ -557,6 +657,7 @@ addEventListener("resize", () => {
 addLights();
 createTerrain();
 populateWorld();
+createViewModel();
 renderHotbar();
 updateHud();
 animate();

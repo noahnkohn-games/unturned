@@ -7,6 +7,7 @@ Prototipo 3D de sobrevivencia inspirado em jogos de mundo aberto com visual bloc
 - `WASD` ou setas: movimentar
 - `Mouse`: olhar
 - `Shift`: correr
+- `Espaco`: pular
 - `E`: coletar item
 - `Clique esquerdo`: atacar ou coletar recursos com o machado
 - `F`: usar item selecionado

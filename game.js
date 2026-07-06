@@ -45,6 +45,8 @@ let attackCooldown = 0;
 let zombieSpawnTimer = 12;
 let itemAction = 0;
 let equippedView = null;
+let verticalVelocity = 0;
+let isGrounded = true;
 
 const state = {
   health: 100,
@@ -467,32 +469,57 @@ function resolveCollision(nextPosition) {
   return true;
 }
 
+function pressed(...names) {
+  return names.some((name) => keys[name]);
+}
+
 function updatePlayer(delta) {
   if (!controls.isLocked || gameEnded) return;
-  let forward = Number(keys.KeyW || keys.ArrowUp) - Number(keys.KeyS || keys.ArrowDown);
-  let sideways = Number(keys.KeyD || keys.ArrowRight) - Number(keys.KeyA || keys.ArrowLeft);
+  let forward = Number(pressed("KeyW", "ArrowUp", "w")) - Number(pressed("KeyS", "ArrowDown", "s"));
+  let sideways = Number(pressed("KeyD", "ArrowRight", "d")) - Number(pressed("KeyA", "ArrowLeft", "a"));
   const inputLength = Math.hypot(forward, sideways);
   if (inputLength > 1) {
     forward /= inputLength;
     sideways /= inputLength;
   }
-  const running = (keys.ShiftLeft || keys.ShiftRight) && state.stamina > 1 && forward > 0;
+  const running = pressed("ShiftLeft", "ShiftRight", "shift") && state.stamina > 1 && forward > 0;
   const moving = forward !== 0 || sideways !== 0;
   const speed = running ? 10.5 : 6.2;
 
-  const oldPosition = camera.position.clone();
-  if (forward) controls.moveForward(forward * speed * delta);
-  if (sideways) controls.moveRight(sideways * speed * delta);
-  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -76, 76);
-  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -76, 76);
-  if (!resolveCollision(camera.position)) {
-    camera.position.x = oldPosition.x;
-    camera.position.z = oldPosition.z;
+  if (moving) {
+    const lookDirection = new THREE.Vector3();
+    camera.getWorldDirection(lookDirection);
+    lookDirection.y = 0;
+    if (lookDirection.lengthSq() < 0.001) lookDirection.set(0, 0, -1);
+    lookDirection.normalize();
+    const rightDirection = new THREE.Vector3().crossVectors(lookDirection, camera.up).normalize();
+    const movement = lookDirection.multiplyScalar(forward)
+      .add(rightDirection.multiplyScalar(sideways))
+      .normalize()
+      .multiplyScalar(speed * delta);
+
+    const nextX = camera.position.clone();
+    nextX.x = THREE.MathUtils.clamp(nextX.x + movement.x, -76, 76);
+    if (resolveCollision(nextX)) camera.position.x = nextX.x;
+
+    const nextZ = camera.position.clone();
+    nextZ.z = THREE.MathUtils.clamp(nextZ.z + movement.z, -76, 76);
+    if (resolveCollision(nextZ)) camera.position.z = nextZ.z;
   }
 
   const ground = terrainHeight(camera.position.x, camera.position.z) + 1.72;
-  const bob = moving ? Math.sin(elapsed * (running ? 14 : 10)) * 0.045 : 0;
-  camera.position.y = THREE.MathUtils.lerp(camera.position.y, ground + bob, 0.22);
+  if (isGrounded) {
+    const bob = moving ? Math.sin(elapsed * (running ? 14 : 10)) * 0.045 : 0;
+    camera.position.y = ground + bob;
+  } else {
+    verticalVelocity -= 19 * delta;
+    camera.position.y += verticalVelocity * delta;
+    if (camera.position.y <= ground) {
+      camera.position.y = ground;
+      verticalVelocity = 0;
+      isGrounded = true;
+    }
+  }
 
   if (running && moving) state.stamina = Math.max(0, state.stamina - delta * 19);
   else state.stamina = Math.min(100, state.stamina + delta * 12);
@@ -553,8 +580,10 @@ function animateObjects(delta) {
     item.rotation.y += delta * 1.4;
     item.position.y = item.userData.baseY + Math.sin(elapsed * 2.5 + index) * 0.12;
   });
-  const moving = keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD
-    || keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
+  const moving = pressed(
+    "KeyW", "KeyS", "KeyA", "KeyD", "w", "s", "a", "d",
+    "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"
+  );
   const walkX = controls.isLocked && moving ? Math.sin(elapsed * 9) * 0.018 : 0;
   const walkY = controls.isLocked && moving ? Math.abs(Math.cos(elapsed * 9)) * 0.016 : 0;
   if (itemAction > 0) {
@@ -619,6 +648,11 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   keys[event.code] = true;
+  keys[event.key.toLowerCase()] = true;
+  if (event.code === "Space" && controls.isLocked && isGrounded && !event.repeat) {
+    isGrounded = false;
+    verticalVelocity = 7.5;
+  }
   if (/^Digit[1-5]$/.test(event.code)) {
     state.selected = Number(event.code.slice(-1)) - 1;
     renderHotbar();
@@ -634,6 +668,13 @@ document.addEventListener("keyup", (event) => {
     event.preventDefault();
   }
   keys[event.code] = false;
+  keys[event.key.toLowerCase()] = false;
+});
+
+addEventListener("blur", () => {
+  Object.keys(keys).forEach((key) => {
+    keys[key] = false;
+  });
 });
 
 controls.addEventListener("unlock", () => {

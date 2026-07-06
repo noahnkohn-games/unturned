@@ -1,31 +1,36 @@
-# Blockland Survival v0.5
+# Blockland Survival v0.6
 
-Protótipo web 3D inspirado em jogos de sobrevivência blocados.
+Protótipo web inspirado em survival de blocos, pronto para GitHub Pages.
 
-## Publicar no GitHub Pages
+## Como publicar no GitHub Pages
 
-1. Extraia este ZIP.
-2. Copie `index.html`, `style.css`, `game.js`, `.nojekyll`, `README.md` e `CHANGELOG-v05.txt` para a raiz do seu repositório.
+1. Extraia o ZIP.
+2. Substitua os arquivos na raiz do seu repositório.
 3. Faça commit e push.
-4. Em Settings > Pages, publique pela branch principal.
+4. No GitHub, ative Pages pela branch principal.
 5. Abra o site com Ctrl+F5 para evitar cache.
 
 ## Controles
 
-- WASD ou Setas: andar
-- Mouse: olhar pros lados
+- WASD ou setas: andar
+- Mouse: olhar
 - Espaço: pular
 - Shift: correr
-- 1-8: trocar item
-- Clique esquerdo: atirar/usar
-- F: usar item equipado
-- E: coletar item próximo
+- 1-9: selecionar item
+- Clique esquerdo ou F: usar item equipado
+- E: coletar
+- J: chat
+- M: mapa do servidor/perfis/grupo
+- ,: kits de armas
+- TAB: inventário/vault
+- ESC: fechar telas
 
-## Novidades v0.5
+## Comandos
 
-- Pistola inicial no slot 1.
-- Munição inicial no slot 2.
-- Zumbis dropam loot aleatório.
-- Zumbis mais rápidos.
-- Zumbis ficam paralisados em pé quando tomam dano.
-- Item equipado aparece na mão em primeira pessoa.
+- `/warp safe` teleporta para a SAFE.
+- `/vault` abre vault remoto menor fora da SAFE, completo dentro da SAFE.
+- `/tpa Nome` teleporta para jogador simulado; membros do grupo não precisam accept.
+
+## Nota
+
+Este pacote não usa sons/assets oficiais de Unturned. Os sons são procedurais e originais para evitar problemas de copyright.

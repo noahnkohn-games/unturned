@@ -3,47 +3,120 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Blockland Survival v0.5</title>
+  <title>Blockland Survival v0.6</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="game"></div>
-
   <div id="crosshair">+</div>
 
   <div id="hud">
-    <div id="version">v0.5 ARQUIVO REAL - PISTOLA + LOOT</div>
+    <div id="version">v0.6 SAFE + CHAT + MAPA + KITS</div>
+    <div id="safeText" class="safe-off">WILD</div>
     <div class="bars">
       <div class="bar"><span>VIDA</span><div><i id="healthBar"></i></div><b id="healthText">100</b></div>
       <div class="bar"><span>FOME</span><div><i id="hungerBar"></i></div><b id="hungerText">100</b></div>
       <div class="bar"><span>SEDE</span><div><i id="thirstBar"></i></div><b id="thirstText">100</b></div>
       <div class="bar"><span>ENERGIA</span><div><i id="energyBar"></i></div><b id="energyText">100</b></div>
     </div>
-    <div id="infoLine">Item: <b id="equippedText">Pistolinha</b> | Munição: <b id="ammoText">36</b> | Zumbis: <b id="zombieText">0</b></div>
+    <div id="infoLine">Item: <b id="equippedText">Pistolinha</b> | Munição: <b id="ammoText">48</b> | Zumbis: <b id="zombieText">0</b></div>
     <div id="hotbar"></div>
     <div id="message"></div>
   </div>
 
   <div id="startScreen">
-    <div class="panel">
-      <h1>Blockland Survival</h1>
-      <h2>v0.5 ARQUIVO REAL - PISTOLA + LOOT</h2>
-      <p>Sobreviva, colete recursos e mate os zumbis. Eles dropam munição, comida, água e ferramentas.</p>
-      <button id="startButton">CLICAR PARA JOGAR</button>
+    <div class="menu-shell">
+      <div class="brand">
+        <h1>Blockland Survival</h1>
+        <h2>v0.6 SAFE + CHAT + MAPA + KITS</h2>
+      </div>
+      <div class="menu-tabs">
+        <button class="menu-tab active" data-target="survivorsMenu">Survivors</button>
+        <button class="menu-tab" data-target="settingsMenu">Configurações</button>
+        <button class="menu-tab" data-target="serversMenu">Servidores</button>
+      </div>
+
+      <div id="survivorsMenu" class="menu-section active">
+        <p>Customize seu boneco antes de carregar o servidor.</p>
+        <label>Nome do survivor
+          <input id="survivorName" maxlength="18" value="Survivor" />
+        </label>
+        <div class="color-row">
+          <label>Camisa <input id="shirtColor" type="color" value="#315c9a" /></label>
+          <label>Pele <input id="skinColor" type="color" value="#f1b47d" /></label>
+        </div>
+        <button id="saveSurvivor">Salvar Survivor</button>
+      </div>
+
+      <div id="settingsMenu" class="menu-section">
+        <p>Configurações locais do protótipo.</p>
+        <label>Volume dos sons procedurais
+          <input id="volumeSlider" type="range" min="0" max="1" step="0.05" value="0.45" />
+        </label>
+        <p class="note">Sons: tiro, zumbi, passos, hit, coleta e carregamento do servidor. São placeholders originais, não assets oficiais.</p>
+      </div>
+
+      <div id="serversMenu" class="menu-section">
+        <p class="server-card"><b>BR-01 Blockland Survival</b><br/>Mapa: Campo + Cidade + SAFE<br/>Status: online local/simulado</p>
+        <p class="note">GitHub Pages hospeda o jogo; multiplayer real precisa de servidor separado depois.</p>
+      </div>
+
+      <button id="startButton">CARREGAR SERVIDOR</button>
+      <div id="menuNotice"></div>
       <div class="controls">
         <b>Controles</b><br/>
-        WASD ou Setas: andar<br/>
-        Mouse: olhar pros lados<br/>
-        Espaço: pular<br/>
-        1-8: trocar item<br/>
-        Clique esquerdo: atirar/usar<br/>
-        F: usar item equipado<br/>
-        E: coletar item próximo<br/>
-        Shift: correr
+        WASD/Setas: andar · Mouse: olhar · Espaço: pular · Shift: correr<br/>
+        1-9: itens · Clique/F: usar · E: coletar<br/>
+        J: chat · M: mapa/perfis/grupo · ,: kits · TAB: inventário/vault · ESC: fechar telas<br/>
+        Comandos: /warp safe · /vault · /tpa Nome
       </div>
     </div>
   </div>
 
-  <script type="module" src="game.js?v=0.5-arquivo-real"></script>
+  <div id="chatPanel" class="overlay small-overlay">
+    <div class="overlay-head"><b>Chat do Servidor</b><button class="closeOverlay">ESC</button></div>
+    <div id="chatLog"><div class="system"><b>Sistema:</b> Aperte J para abrir/fechar. Comandos: /warp safe, /vault, /tpa Nome</div></div>
+    <div class="chat-row"><input id="chatInput" placeholder="Digite mensagem ou comando..." /><button id="chatSend">Enviar</button></div>
+  </div>
+
+  <div id="mapPanel" class="overlay wide-overlay">
+    <div class="overlay-head"><b>Mapa do Servidor — BR-01 Blockland Survival</b><button class="closeOverlay">ESC</button></div>
+    <div class="map-grid">
+      <canvas id="serverMapCanvas" width="420" height="420"></canvas>
+      <div>
+        <h3>Jogadores online</h3>
+        <div id="playerList"></div>
+        <h3>Grupo</h3>
+        <div class="group-box">
+          <input id="groupNameInput" placeholder="Nome do grupo" />
+          <button id="createGroupBtn">Criar grupo</button>
+          <p>Grupo: <b id="groupNameDisplay">Sem grupo</b></p>
+          <p>Membros: <span id="groupMembers">Você</span></p>
+          <p class="note">No grupo, /tpa para integrantes não precisa /tpa accept.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="kitsPanel" class="overlay kits-overlay">
+    <div class="overlay-head"><b>Kits de Armas</b><button class="closeOverlay">ESC</button></div>
+    <div class="kit-grid">
+      <button data-kit="starter"><b>Starter</b><span>Pistolinha + munição + comida/água</span></button>
+      <button data-kit="viper"><b>Viper</b><span>SMG leve + munição rifle</span></button>
+      <button data-kit="maple"><b>MapleStrike</b><span>Rifle forte + munição</span></button>
+      <button data-kit="sniper"><b>Sniper</b><span>Longo alcance + munição rara</span></button>
+    </div>
+  </div>
+
+  <div id="inventoryPanel" class="overlay inventory-overlay">
+    <div class="overlay-head"><b id="inventoryTitle">Inventário</b><button class="closeOverlay">ESC</button></div>
+    <p id="vaultHint" class="note"></p>
+    <div class="inventory-grid">
+      <div><h3>Mochila</h3><div id="inventoryList"></div></div>
+      <div><h3>Vault seguro</h3><div id="vaultList"></div></div>
+    </div>
+  </div>
+
+  <script type="module" src="game.js?v=0.6-safe-chat-map-kits"></script>
 </body>
 </html>

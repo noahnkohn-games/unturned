@@ -1,0 +1,16 @@
+Blockland Survival v0.6
+
+- Zumbis com rosto blocado: olhos, boca e dente.
+- Novas armas: Viper, MapleStrike e Sniper.
+- Tela inicial full-screen com abas Survivors, Configurações e Servidores.
+- Customização simples de nome, pele e camisa do survivor.
+- Sons procedurais originais: tiros, zumbi, passos, coleta, hit e carregamento.
+- SAFE zone com área visível, sem ataque de zumbi e sem PVP simulado.
+- Chat no J com comandos /warp safe, /vault e /tpa Nome.
+- Mapa no M com servidor, jogadores simulados, perfil, grupo e convite.
+- Grupos: convite e entrada simulada; /tpa para membros funciona sem accept.
+- Tela de kits no botão vírgula (,), fechando com ESC.
+- Inventário/vault no TAB. Vault persiste no localStorage após morte.
+- /vault fora da SAFE abre modo remoto menor.
+
+Observação: Sons e assets são originais/procedurais. Não foram copiados assets oficiais de Unturned.

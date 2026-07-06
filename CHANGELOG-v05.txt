@@ -1,0 +1,13 @@
+Blockland Survival v0.5 ARQUIVO REAL
+
+- Adicionada pistolinha inicial.
+- Adicionada munição de pistola.
+- Clique esquerdo atira com a pistola.
+- Zumbis dropam munição, comida, água, madeira, pedra, ferramentas e machado raro.
+- Zumbis ficaram mais rápidos.
+- Quando levam tiro ou machadada, ficam paralisados em pé por um tempo.
+- Removido comportamento visual de deitar; zumbis giram somente no eixo horizontal.
+- Item equipado aparece na mão do personagem.
+- WASD e setas movimentam.
+- Espaço pula.
+- Versão visível na tela inicial e HUD para confirmar que não é cache antigo.

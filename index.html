@@ -1,66 +1,49 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#17251a">
-  <title>Blockland Survival</title>
-  <link rel="stylesheet" href="./style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blockland Survival v0.5</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="game"></div>
 
-  <section id="menu" class="overlay">
-    <div class="menu-panel">
-      <p class="eyebrow">PROTOTIPO DE SOBREVIVENCIA</p>
-      <h1>BLOCKLAND</h1>
-      <p class="subtitle">Explore, colete recursos e sobreviva aos infectados.</p>
-      <button id="play-button" type="button">JOGAR</button>
-      <div class="controls">
-        <span><b>WASD</b> mover</span>
-        <span><b>Mouse</b> olhar</span>
-        <span><b>Shift</b> correr</span>
-        <span><b>Espaco</b> pular</span>
-        <span><b>E</b> coletar</span>
-        <span><b>F</b> usar</span>
-        <span><b>1-5</b> itens</span>
-      </div>
-    </div>
-  </section>
+  <div id="crosshair">+</div>
 
-  <div id="hud" class="hidden">
-    <div id="status-bars">
-      <div class="status"><span>VIDA</span><div><i id="health-bar"></i></div><b id="health-value">100</b></div>
-      <div class="status"><span>FOME</span><div><i id="hunger-bar"></i></div><b id="hunger-value">100</b></div>
-      <div class="status"><span>SEDE</span><div><i id="thirst-bar"></i></div><b id="thirst-value">100</b></div>
-      <div class="status"><span>ENERGIA</span><div><i id="stamina-bar"></i></div><b id="stamina-value">100</b></div>
+  <div id="hud">
+    <div id="version">v0.5 ARQUIVO REAL - PISTOLA + LOOT</div>
+    <div class="bars">
+      <div class="bar"><span>VIDA</span><div><i id="healthBar"></i></div><b id="healthText">100</b></div>
+      <div class="bar"><span>FOME</span><div><i id="hungerBar"></i></div><b id="hungerText">100</b></div>
+      <div class="bar"><span>SEDE</span><div><i id="thirstBar"></i></div><b id="thirstText">100</b></div>
+      <div class="bar"><span>ENERGIA</span><div><i id="energyBar"></i></div><b id="energyText">100</b></div>
     </div>
-    <div id="objective">Encontre suprimentos e sobreviva</div>
-    <div id="crosshair"></div>
-    <div id="interaction"></div>
-    <div id="message"></div>
+    <div id="infoLine">Item: <b id="equippedText">Pistolinha</b> | Munição: <b id="ammoText">36</b> | Zumbis: <b id="zombieText">0</b></div>
     <div id="hotbar"></div>
+    <div id="message"></div>
   </div>
 
-  <div id="hurt"></div>
-
-  <section id="game-over" class="overlay hidden">
-    <div class="menu-panel compact">
-      <p class="eyebrow">VOCE NAO SOBREVIVEU</p>
-      <h2>FIM DE JOGO</h2>
-      <p id="final-score"></p>
-      <button id="restart-button" type="button">TENTAR NOVAMENTE</button>
+  <div id="startScreen">
+    <div class="panel">
+      <h1>Blockland Survival</h1>
+      <h2>v0.5 ARQUIVO REAL - PISTOLA + LOOT</h2>
+      <p>Sobreviva, colete recursos e mate os zumbis. Eles dropam munição, comida, água e ferramentas.</p>
+      <button id="startButton">CLICAR PARA JOGAR</button>
+      <div class="controls">
+        <b>Controles</b><br/>
+        WASD ou Setas: andar<br/>
+        Mouse: olhar pros lados<br/>
+        Espaço: pular<br/>
+        1-8: trocar item<br/>
+        Clique esquerdo: atirar/usar<br/>
+        F: usar item equipado<br/>
+        E: coletar item próximo<br/>
+        Shift: correr
+      </div>
     </div>
-  </section>
+  </div>
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
-      }
-    }
-  </script>
-  <script type="module" src="./game.js"></script>
+  <script type="module" src="game.js?v=0.5-arquivo-real"></script>
 </body>
 </html>

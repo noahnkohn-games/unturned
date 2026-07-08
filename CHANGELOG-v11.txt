@@ -1,0 +1,6 @@
+v1.1 ONLINE READY
+- Removidos players simulados/fake.
+- Só aparecem jogadores reais conectados via WebSocket.
+- Menu inicial em estilo survival: opções no canto esquerdo e survivor no centro.
+- Servidor único BR-01.
+- Incluído backend opcional em /server para multiplayer real.

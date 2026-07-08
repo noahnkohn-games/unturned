@@ -73,10 +73,6 @@ const weaponDefs = {
 };
 
 const serverPlayers = [
-  { name: 'Noahn', role: 'Builder', color: 0x3498db, position: new THREE.Vector3(35, 0, 28), online: true },
-  { name: 'Aimee', role: 'Medic', color: 0xff6fb1, position: new THREE.Vector3(-42, 0, 34), online: true },
-  { name: 'Aylah', role: 'Scout', color: 0x9b59b6, position: new THREE.Vector3(54, 0, -35), online: true },
-  { name: 'Chloe', role: 'Farmer', color: 0x2ecc71, position: new THREE.Vector3(-58, 0, -18), online: true },
 ];
 
 const scene = new THREE.Scene();
@@ -1171,7 +1167,7 @@ function sendChatFromInput() {
   if (text.startsWith('/')) handleCommand(text);
   else {
     addChatLine(state.survivor.name, text);
-    setTimeout(() => addChatLine('Noahn', 'Recebido! Bora sobreviver.'), 500);
+    
   }
 }
 
@@ -1188,7 +1184,7 @@ function handleCommand(text) {
     addChatLine('Sistema', state.safe ? 'Vault da SAFE aberto.' : 'Vault remoto aberto em modo menor.', true);
   } else if (cmd === '/tpa') {
     const target = serverPlayers.find(p => p.name.toLowerCase() === arg.toLowerCase());
-    if (!target) return addChatLine('Sistema', 'Use /tpa nome. Exemplo: /tpa Noahn', true);
+    if (!target) return addChatLine('Sistema', 'Use /tpa nome. Exemplo: /tpa NomeDoJogador', true);
     if (state.group.members.includes(target.name)) {
       state.player.copy(target.position).add(new THREE.Vector3(1.5, terrainHeight(target.position.x, target.position.z) + 2.0, 1.5));
       addChatLine('Sistema', `TPA para ${target.name} liberado pelo grupo.`, true);
@@ -2769,4 +2765,509 @@ wireUI();
   collectPickup = function(p) { _oldCollectPickupV10(p); syncLayouts(); saveInvUi(); };
 
   showMessage('v1.0: inventário agora usa grade estilo survival, com ícones, hover e arrastar/soltar.');
+})();
+
+
+// ==============================
+// v1.1 ONLINE READY: sem bots/fake players + menu estilo survival
+// ==============================
+(() => {
+  const V11 = 'v1.1 ONLINE READY';
+  document.title = 'Blockland Survival v1.1';
+  document.getElementById('version').textContent = V11;
+  document.querySelectorAll('.brand h2').forEach(el => el.textContent = V11);
+
+  // Remove qualquer survivor simulado criado por versões anteriores. Daqui em diante só entram jogadores reais recebidos pelo WebSocket.
+  serverPlayers.length = 0;
+  for (const mesh of [...friendlyMeshes]) scene.remove(mesh);
+  friendlyMeshes.length = 0;
+
+  const qs = new URLSearchParams(location.search);
+  const wsFromQuery = qs.get('ws') || '';
+  const configuredWs = (window.BLOCKLAND_WS_URL || wsFromQuery || localStorage.getItem('blocklandWsUrl') || '').trim();
+  const net = state.net = {
+    serverName: 'BR-01 Blockland Survival',
+    endpoint: configuredWs,
+    id: localStorage.getItem('blocklandClientId') || cryptoRandomId(),
+    socket: null,
+    connected: false,
+    connecting: false,
+    lastSend: 0,
+    remote: new Map(),
+    selectedServer: 'BR-01',
+  };
+  localStorage.setItem('blocklandClientId', net.id);
+
+  function cryptoRandomId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return 'p-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+  function colorHexToNumber(hex, fallback = 0x315c9a) {
+    if (!hex || typeof hex !== 'string') return fallback;
+    return Number.parseInt(hex.replace('#',''), 16) || fallback;
+  }
+  function vecPayload(v) { return { x: Number(v.x.toFixed(3)), y: Number(v.y.toFixed(3)), z: Number(v.z.toFixed(3)) }; }
+  function vectorFromPayload(p) { return new THREE.Vector3(Number(p?.x || 0), Number(p?.y || 0), Number(p?.z || 0)); }
+  function isGroupMate(name) { return state.group.members.includes(name); }
+  function selfOnlinePlayer() {
+    return { id: net.id, name: state.survivor.name, role:'Você', online:true, real:true, self:true, hp:Math.round(state.health), position:state.player.clone(), shirt:state.survivor.shirt, skin:state.survivor.skin };
+  }
+  function realOnlinePlayers() {
+    const now = performance.now();
+    const arr = [selfOnlinePlayer()];
+    for (const p of net.remote.values()) {
+      if (!p.online) continue;
+      if (now - (p.updatedAt || 0) > 15000) continue;
+      arr.push(p);
+    }
+    return arr;
+  }
+
+  function buildMenuV11() {
+    const start = document.getElementById('startScreen');
+    const shell = document.querySelector('.menu-shell');
+    if (!start || !shell) return;
+    start.classList.add('online-menu');
+    if (!document.getElementById('menuSurvivorPreview')) {
+      const stage = document.createElement('div');
+      stage.id = 'menuSurvivorPreview';
+      stage.className = 'menu-character-stage';
+      stage.innerHTML = `
+        <div class="menu-avatar" id="menuAvatar">
+          <div class="hair"></div><div class="head"></div><div class="eye left"></div><div class="eye right"></div><div class="mouth"></div>
+          <div class="body"></div><div class="arm left"></div><div class="arm right"></div><div class="hand left"></div><div class="hand right"></div>
+          <div class="leg left"></div><div class="leg right"></div><div class="foot left"></div><div class="foot right"></div>
+        </div>`;
+      const tabs = document.querySelector('.menu-tabs');
+      tabs?.after(stage);
+    }
+    document.getElementById('startButton').textContent = 'ENTRAR NO BR-01';
+    const servers = document.getElementById('serversMenu');
+    if (servers) {
+      servers.innerHTML = `
+        <h3>Servidores</h3>
+        <div class="online-server-card selected">
+          <b><span class="online-dot ${net.endpoint ? 'wait' : ''}" id="serverDot"></span>BR-01 Blockland Survival</b><br/>
+          <span>Mapa: Campo + Cidade + SAFE</span><br/>
+          <span id="serverStatusLine">${net.endpoint ? 'Pronto para conectar jogadores reais' : 'Aguardando backend multiplayer'}</span>
+          <p class="note">Servidor único selecionado. Sem bots: a lista mostra apenas jogadores reais conectados.</p>
+        </div>
+      `;
+    }
+    const settings = document.getElementById('settingsMenu');
+    if (settings && !document.getElementById('wsEndpoint')) {
+      settings.insertAdjacentHTML('beforeend', `
+        <label>Servidor multiplayer WebSocket
+          <input id="wsEndpoint" placeholder="wss://seu-servidor.onrender.com" value="${net.endpoint.replace(/"/g,'&quot;')}" />
+        </label>
+        <button id="saveServerUrl" type="button">Salvar servidor online</button>
+        <p class="note">GitHub Pages abre o jogo. Para jogadores reais no mesmo mundo, use a pasta /server inclusa no ZIP e cole aqui a URL wss://.</p>
+      `);
+      document.getElementById('saveServerUrl').addEventListener('click', () => {
+        const value = document.getElementById('wsEndpoint').value.trim();
+        localStorage.setItem('blocklandWsUrl', value);
+        net.endpoint = value;
+        updateServerStatusLine();
+        showMenuNotice(value ? 'Servidor online salvo. Entre no BR-01.' : 'URL limpa. Só você aparecerá até configurar o backend.');
+      });
+    }
+    const name = document.getElementById('survivorName');
+    const shirt = document.getElementById('shirtColor');
+    const skin = document.getElementById('skinColor');
+    [name, shirt, skin].forEach(el => el?.addEventListener('input', updateMenuAvatar));
+    updateMenuAvatar();
+    updateServerStatusLine();
+  }
+
+  function updateMenuAvatar() {
+    const avatar = document.getElementById('menuAvatar');
+    if (!avatar) return;
+    const shirt = document.getElementById('shirtColor')?.value || state.survivor.shirt;
+    const skin = document.getElementById('skinColor')?.value || state.survivor.skin;
+    avatar.style.setProperty('--shirt', shirt);
+    avatar.style.setProperty('--skin', skin);
+  }
+
+  function updateServerStatusLine() {
+    const dot = document.getElementById('serverDot');
+    const line = document.getElementById('serverStatusLine');
+    if (dot) dot.className = `online-dot ${net.connected ? 'on' : net.endpoint ? 'wait' : ''}`;
+    if (line) {
+      line.textContent = net.connected
+        ? `Online real conectado · ${Math.max(1, realOnlinePlayers().length)} jogador(es)`
+        : net.endpoint
+          ? 'Servidor configurado · conectará ao entrar'
+          : 'Backend não configurado · nenhum jogador falso será mostrado';
+    }
+    const hudLine = document.getElementById('onlineLine');
+    if (hudLine) hudLine.textContent = net.connected ? `BR-01 Online · ${realOnlinePlayers().length}` : 'BR-01 · aguardando online real';
+  }
+
+  function addOnlineHudLine() {
+    if (document.getElementById('onlineLine')) return;
+    const div = document.createElement('div');
+    div.id = 'onlineLine';
+    div.textContent = 'BR-01 · aguardando online real';
+    document.body.appendChild(div);
+  }
+
+  function connectMultiplayer() {
+    if (!net.endpoint) {
+      net.connected = false;
+      addChatLine('Sistema', 'BR-01 entrou sem backend multiplayer. Só jogadores reais conectados aparecerão; nenhum bot será criado.', true);
+      updateServerStatusLine();
+      return;
+    }
+    if (net.socket && (net.socket.readyState === WebSocket.OPEN || net.socket.readyState === WebSocket.CONNECTING)) return;
+    net.connecting = true;
+    updateServerStatusLine();
+    try {
+      const ws = new WebSocket(net.endpoint);
+      net.socket = ws;
+      ws.addEventListener('open', () => {
+        net.connected = true;
+        net.connecting = false;
+        sendNet({ type:'join', player: makeNetPlayerPayload() });
+        addChatLine('Sistema', `Conectado ao ${net.serverName}.`, true);
+        showMessage('BR-01 online: jogadores reais aparecerão no mapa e no mundo.');
+        updateServerStatusLine();
+      });
+      ws.addEventListener('message', (event) => {
+        let data; try { data = JSON.parse(event.data); } catch { return; }
+        handleNetMessage(data);
+      });
+      ws.addEventListener('close', () => {
+        net.connected = false;
+        net.connecting = false;
+        for (const p of net.remote.values()) removeRemoteMesh(p);
+        net.remote.clear();
+        addChatLine('Sistema', 'Desconectado do servidor multiplayer.', true);
+        updateServerStatusLine();
+      });
+      ws.addEventListener('error', () => {
+        net.connected = false;
+        net.connecting = false;
+        showMessage('Não consegui conectar no WebSocket. Confira a URL em Configurações.');
+        updateServerStatusLine();
+      });
+    } catch (err) {
+      net.connected = false;
+      net.connecting = false;
+      showMessage('URL do servidor inválida. Use wss://...');
+      updateServerStatusLine();
+    }
+  }
+
+  function makeNetPlayerPayload() {
+    return {
+      id: net.id,
+      name: state.survivor.name || 'Survivor',
+      shirt: state.survivor.shirt,
+      skin: state.survivor.skin,
+      hp: Math.round(state.health),
+      safe: state.safe,
+      group: state.group.name || '',
+      position: vecPayload(state.player),
+      yaw: state.yaw,
+      selected: slots[state.selected]?.id || 'hands',
+    };
+  }
+  function sendNet(payload) {
+    if (!net.socket || net.socket.readyState !== WebSocket.OPEN) return false;
+    net.socket.send(JSON.stringify(payload));
+    return true;
+  }
+  function updateMultiplayerV11(dt) {
+    const now = performance.now();
+    if (net.connected && now - net.lastSend > 120) {
+      net.lastSend = now;
+      sendNet({ type:'state', player: makeNetPlayerPayload() });
+    }
+    for (const p of [...net.remote.values()]) {
+      if (now - (p.updatedAt || 0) > 20000) {
+        removeRemoteMesh(p);
+        net.remote.delete(p.id);
+        continue;
+      }
+      if (p.mesh && p.targetPosition) {
+        p.mesh.position.lerp(p.targetPosition, Math.min(1, dt * 10));
+        p.position.copy(p.mesh.position);
+        if (typeof p.yaw === 'number') p.mesh.rotation.y = p.yaw;
+      }
+    }
+    updateServerStatusLine();
+  }
+
+  function handleNetMessage(data) {
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'welcome' && data.id && !localStorage.getItem('blocklandClientId')) {
+      net.id = data.id;
+      localStorage.setItem('blocklandClientId', net.id);
+    }
+    if (data.type === 'snapshot' && Array.isArray(data.players)) {
+      data.players.forEach(p => upsertRemotePlayer(p));
+    }
+    if ((data.type === 'join' || data.type === 'state') && data.player) upsertRemotePlayer(data.player);
+    if (data.type === 'leave' && data.id) {
+      const p = net.remote.get(data.id); if (p) removeRemoteMesh(p); net.remote.delete(data.id);
+    }
+    if (data.type === 'chat' && data.author && data.message) addChatLine(data.author, data.message);
+    if (data.type === 'hit' && data.targetId === net.id && !state.safe) {
+      state.health = Math.max(0, state.health - Number(data.damage || 0));
+      playSound('hurt');
+      showMessage(`${data.author || 'Jogador'} acertou você.`);
+      if (state.health <= 0) endGame();
+    }
+    if (data.type === 'groupInvite' && data.targetId === net.id) {
+      const groupName = data.groupName || `${data.author} Squad`;
+      if (!state.group.invites.includes(groupName)) state.group.invites.push(groupName);
+      addChatLine('Sistema', `${data.author} convidou você para o grupo ${groupName}. Abra M para aceitar.`, true);
+      if (state.mapOpen) renderMap();
+    }
+  }
+
+  function upsertRemotePlayer(raw) {
+    if (!raw || raw.id === net.id) return;
+    const now = performance.now();
+    let p = net.remote.get(raw.id);
+    if (!p) {
+      p = { id: raw.id, name: raw.name || 'Jogador', role:'Online', real:true, online:true, hp:100, position:new THREE.Vector3(), targetPosition:new THREE.Vector3(), updatedAt:now };
+      net.remote.set(p.id, p);
+      createRemoteMesh(p);
+      addChatLine('Sistema', `${p.name} entrou no BR-01.`, true);
+    }
+    p.name = raw.name || p.name || 'Jogador';
+    p.role = 'Online';
+    p.real = true;
+    p.online = true;
+    p.hp = Number(raw.hp ?? p.hp ?? 100);
+    p.shirt = raw.shirt || p.shirt || '#315c9a';
+    p.skin = raw.skin || p.skin || '#f1b47d';
+    p.safe = !!raw.safe;
+    p.group = raw.group || '';
+    p.yaw = Number(raw.yaw || 0);
+    p.selected = raw.selected || 'hands';
+    const pos = vectorFromPayload(raw.position);
+    pos.y = terrainHeight(pos.x, pos.z);
+    p.targetPosition = pos;
+    p.updatedAt = now;
+    updateRemoteMeshLook(p);
+  }
+
+  function createRemoteMesh(p) {
+    const group = new THREE.Group();
+    const shirt = new THREE.MeshLambertMaterial({ color: colorHexToNumber(p.shirt) });
+    const skin = new THREE.MeshLambertMaterial({ color: colorHexToNumber(p.skin, 0xf1b47d) });
+    const body = box(1.1, 1.7, 0.65, shirt); body.position.y = 1.65;
+    const head = box(0.86, 0.86, 0.86, skin); head.position.y = 3.05;
+    const eyeL = box(0.12,0.12,0.04,mats.black); eyeL.position.set(-.18,3.12,-.45);
+    const eyeR = box(0.12,0.12,0.04,mats.black); eyeR.position.set(.18,3.12,-.45);
+    const legs = box(.9,1.2,.5,new THREE.MeshLambertMaterial({ color: 0x263348 })); legs.position.y=.6;
+    const tag = makeRemoteNameSprite(p.name); tag.position.y = 3.95;
+    group.add(body, head, eyeL, eyeR, legs, tag);
+    group.position.copy(p.position);
+    group.userData.player = p;
+    group.userData.remotePlayer = p;
+    scene.add(group);
+    p.mesh = group;
+    p.label = tag;
+    friendlyMeshes.push(group);
+  }
+  function updateRemoteMeshLook(p) {
+    if (!p.mesh) return;
+    const shirtNum = colorHexToNumber(p.shirt);
+    const skinNum = colorHexToNumber(p.skin, 0xf1b47d);
+    p.mesh.traverse(obj => {
+      if (!obj.material || obj.isSprite) return;
+      // body first child and head second child in this mesh
+    });
+    if (p.label && p.label.userData.nameText !== p.name) {
+      p.mesh.remove(p.label);
+      p.label = makeRemoteNameSprite(p.name);
+      p.label.position.y = 3.95;
+      p.mesh.add(p.label);
+    }
+  }
+  function removeRemoteMesh(p) {
+    if (p?.mesh) {
+      scene.remove(p.mesh);
+      const idx = friendlyMeshes.indexOf(p.mesh);
+      if (idx >= 0) friendlyMeshes.splice(idx,1);
+    }
+    p.mesh = null;
+  }
+  function makeRemoteNameSprite(text) {
+    const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,.62)'; ctx.fillRect(0,0,256,64);
+    ctx.fillStyle = '#9dffd4'; ctx.font = 'bold 28px Arial'; ctx.textAlign = 'center';
+    ctx.fillText(text, 128, 40);
+    const tex = new THREE.CanvasTexture(canvas);
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true }));
+    spr.scale.set(3.4,.85,1);
+    spr.userData.nameText = text;
+    return spr;
+  }
+
+  const previousStartGameV11 = startGame;
+  startGame = function() {
+    applyMenuSettings();
+    state.started = true;
+    initAudio();
+    playSound('serverLoad');
+    document.getElementById('startScreen').style.display = 'none';
+    renderer.domElement.requestPointerLock();
+    teleportToSafe(false);
+    connectMultiplayer();
+    showMessage('Entrando no BR-01. Sem bots: só jogadores reais conectados aparecem.');
+  };
+
+  const previousUpdateSpawnsV11 = updateSpawns;
+  updateSpawns = function(dt) {
+    previousUpdateSpawnsV11(dt);
+    updateMultiplayerV11(dt);
+  };
+
+  renderMap = function() {
+    const list = document.getElementById('playerList');
+    list.innerHTML = '';
+    const players = realOnlinePlayers();
+    players.forEach((p) => {
+      const row = document.createElement('div');
+      row.className = `player-card ${p.self ? 'self' : 'real-online'}`;
+      const inGroup = state.group.members.includes(p.name);
+      row.innerHTML = `<div><b>${p.name}</b><span>${p.self ? 'Você' : 'Jogador real'} · online · HP:${p.hp ?? 100} · X:${Math.round(p.position.x)} Z:${Math.round(p.position.z)}</span></div>`;
+      if (!p.self) {
+        const btn = document.createElement('button');
+        btn.textContent = inGroup ? 'No grupo' : 'Convidar';
+        btn.disabled = inGroup;
+        btn.addEventListener('click', () => inviteToGroup(p.name));
+        row.appendChild(btn);
+      }
+      list.appendChild(row);
+    });
+    if (players.length === 1) {
+      const empty = document.createElement('div');
+      empty.className = 'player-card';
+      empty.innerHTML = `<div><b>Nenhum outro jogador real online</b><span>${net.endpoint ? 'Aguardando conexões no BR-01.' : 'Configure o WebSocket em Configurações para multiplayer real.'}</span></div>`;
+      list.appendChild(empty);
+    }
+    document.getElementById('groupNameDisplay').textContent = state.group.name || 'Sem grupo';
+    document.getElementById('groupMembers').textContent = state.group.members.join(', ');
+    drawServerMap(players);
+  };
+
+  drawServerMap = function(players) {
+    const canvas = document.getElementById('serverMapCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#244b2a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#303030'; ctx.fillRect(canvas.width/2 - 8, 0, 16, canvas.height);
+    ctx.strokeStyle = '#42f5a7'; ctx.lineWidth = 3;
+    const sx = (safeZone.x + 90) / 180 * canvas.width;
+    const sz = (safeZone.z + 90) / 180 * canvas.height;
+    ctx.beginPath(); ctx.arc(sx, sz, safeZone.radius / 180 * canvas.width, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = '#42f5a7'; ctx.fillText('SAFE', sx - 14, sz + 4);
+    for (const p of players) {
+      const x = (p.position.x + 90) / 180 * canvas.width;
+      const z = (p.position.z + 90) / 180 * canvas.height;
+      ctx.fillStyle = p.self ? '#ffd86a' : '#9dffd4';
+      ctx.beginPath(); ctx.arc(x, z, p.self ? 5 : 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillText(p.name, x + 7, z + 4);
+    }
+    if (state.bases) {
+      for (const b of state.bases) {
+        const x=(b.position.x+90)/180*canvas.width, z=(b.position.z+90)/180*canvas.height;
+        ctx.fillStyle = b.owner==='Você' ? '#ffd86a' : '#ff6969'; ctx.fillRect(x-5,z-5,10,10);
+      }
+    }
+    if (state.airdrops) {
+      for (const ad of state.airdrops) {
+        const cx=(ad.callPoint.x+90)/180*canvas.width, cz=(ad.callPoint.z+90)/180*canvas.height;
+        const dx=(ad.dropPoint.x+90)/180*canvas.width, dz=(ad.dropPoint.z+90)/180*canvas.height;
+        ctx.strokeStyle='#ffd86a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx,cz); ctx.lineTo(dx,dz); ctx.stroke();
+        ctx.fillStyle='#ffd86a'; ctx.fillText('DROP', dx+5, dz-5);
+      }
+    }
+  };
+
+  inviteToGroup = function(name) {
+    const target = [...net.remote.values()].find(p => p.name === name);
+    if (!target) return addChatLine('Sistema', 'Esse jogador não está online agora.', true);
+    if (!state.group.name) state.group.name = `${state.survivor.name} Squad`;
+    addChatLine('Sistema', `Convite enviado para ${name}.`, true);
+    sendNet({ type:'groupInvite', targetId: target.id, author: state.survivor.name, groupName: state.group.name });
+    renderMap();
+  };
+
+  const previousHandleCommandV11 = handleCommand;
+  handleCommand = function(text) {
+    const parts = text.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const arg = parts.slice(1).join(' ');
+    addChatLine(state.survivor.name, text);
+    if (cmd === '/warp' && arg.toLowerCase() === 'safe') {
+      teleportToSafe(true);
+      addChatLine('Sistema', 'Warp usado: SAFE.', true);
+    } else if (cmd === '/vault') {
+      toggleInventory(state.safe ? 'safe' : 'small');
+      addChatLine('Sistema', state.safe ? 'Vault da SAFE aberto.' : 'Vault remoto aberto em modo menor.', true);
+    } else if (cmd === '/tpa') {
+      const target = [...net.remote.values()].find(p => p.name.toLowerCase() === arg.toLowerCase());
+      if (!target) return addChatLine('Sistema', 'Use /tpa NomeDoJogador. Só jogadores reais online aparecem.', true);
+      if (state.group.members.includes(target.name)) {
+        state.player.copy(target.position).add(new THREE.Vector3(1.5, terrainHeight(target.position.x, target.position.z) + 2.0, 1.5));
+        addChatLine('Sistema', `TPA para ${target.name} liberado pelo grupo.`, true);
+      } else {
+        addChatLine('Sistema', `Pedido de TPA enviado para ${target.name}. Ele precisa aceitar no jogo real.`, true);
+        sendNet({ type:'tpaRequest', targetId: target.id, author: state.survivor.name });
+      }
+    } else {
+      addChatLine('Sistema', 'Comandos: /warp safe, /vault, /tpa NomeDoJogador', true);
+    }
+  };
+
+  sendChatFromInput = function() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    if (text.startsWith('/')) return handleCommand(text);
+    addChatLine(state.survivor.name, text);
+    sendNet({ type:'chat', author: state.survivor.name, message: text });
+  };
+
+  const previousShootV11 = shoot;
+  shoot = function() {
+    const def = currentWeaponDef();
+    if (!def) return showMessage('Equipe uma arma primeiro.');
+    if ((state.inventory[def.id] || 0) <= 0) return showMessage(`Você ainda não tem ${def.label}.`);
+    if ((state.inventory[def.ammo] || 0) <= 0) return showMessage('Sem munição para essa arma!');
+    state.inventory[def.ammo]--; state.attackAnim = 1; playSound(def.sound);
+    raycaster.setFromCamera(new THREE.Vector2(THREE.MathUtils.randFloatSpread(def.spread), THREE.MathUtils.randFloatSpread(def.spread)), camera);
+    let best = null, bestDist = Infinity, kind = 'zombie';
+    for (const z of zombies) {
+      if (!z.alive) continue; const dist=z.group.position.distanceTo(state.player); if (dist>def.range) continue;
+      const box3=new THREE.Box3().setFromObject(z.group); const hit=raycaster.ray.intersectBox(box3,new THREE.Vector3()); if(hit && dist<bestDist){best=z; bestDist=dist; kind='zombie';}
+    }
+    for (const p of net.remote.values()) {
+      if (!p.mesh || p.safe || isInSafeZone(p.position) || isGroupMate(p.name)) continue;
+      const dist=p.position.distanceTo(state.player); if (dist>def.range) continue;
+      const box3=new THREE.Box3().setFromObject(p.mesh); const hit=raycaster.ray.intersectBox(box3,new THREE.Vector3()); if(hit && dist<bestDist){best=p; bestDist=dist; kind='player';}
+    }
+    if (best) {
+      const targetPos = kind==='zombie' ? best.group.position.clone().add(new THREE.Vector3(0,2.3,0)) : best.position.clone().add(new THREE.Vector3(0,2.3,0));
+      createBulletTrail(targetPos, def.color);
+      if (kind==='zombie') damageZombie(best, def.damage, def.stun);
+      else {
+        showMessage(`Acertou ${best.name}.`);
+        sendNet({ type:'hit', targetId: best.id, damage:def.damage, author:state.survivor.name, weapon:def.label });
+      }
+    } else createBulletTrail(null, def.color);
+  };
+
+  // garante que os botões reconstruídos continuem com comportamento correto
+  buildMenuV11();
+  addOnlineHudLine();
+  updateServerStatusLine();
 })();

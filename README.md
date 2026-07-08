@@ -33,3 +33,16 @@ Fome e sede agora quase não descem fora da safe, e ficam pausadas dentro da SAF
 
 ## v1.0
 - Inventário em grade inspirado em survival UI, com ícones, tooltip no hover e drag-and-drop para organizar.
+
+
+## v1.1 Online Ready
+- Remove jogadores simulados e nomes fixos.
+- Mapa, chat e mundo mostram apenas você e jogadores reais recebidos pelo WebSocket.
+- Tela inicial reorganizada com menu no canto esquerdo e survivor no centro.
+- Servidor único BR-01 selecionado.
+- Inclui pasta /server com um relay WebSocket Node.js para hospedar fora do GitHub Pages.
+
+Para multiplayer real:
+1. Hospede a pasta `server` em um serviço Node.
+2. Copie a URL `wss://...` para `config.js` ou para Configurações dentro do jogo.
+3. Publique o restante no GitHub Pages.

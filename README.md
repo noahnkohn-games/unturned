@@ -1,4 +1,4 @@
-# Blockland Survival v0.8
+# Blockland Survival v0.7
 
 Protótipo web 3D inspirado em survival blocado, pronto para GitHub Pages.
 
@@ -27,9 +27,9 @@ Bases, safe zone, NPCs, XP, airdrops, C4, carros, PVP simulado, zumbis perto das
 Sons e modelos são originais/procedurais; nenhum asset oficial é incluído.
 
 
-## Balance v0.8
+## v0.9 PVP Balance Extremo
+Fome e sede agora quase não descem fora da safe, e ficam pausadas dentro da SAFE. Confirme que a tela inicial mostra v0.9.
 
-- Fome agora desce de 0.55/s para 0.07/s.
-- Sede agora desce de 0.75/s para 0.09/s.
-- Tempo aproximado até zerar: fome ~24 minutos, sede ~18 minutos.
-- Objetivo: permitir PVP, raid e exploração sem precisar parar toda hora para comer/beber.
+
+## v1.0
+- Inventário em grade inspirado em survival UI, com ícones, tooltip no hover e drag-and-drop para organizar.

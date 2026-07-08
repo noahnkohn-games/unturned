@@ -1,0 +1,6 @@
+v1.0 INVENTÁRIO EM GRADE
+- Inventário visual em grade
+- Itens como ícones
+- Tooltip com nome ao passar o mouse
+- Arrastar e soltar para organizar mochila/mãos/vault
+- Nearby visual

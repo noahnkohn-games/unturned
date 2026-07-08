@@ -1,0 +1,11 @@
+Blockland Survival v0.9 - PVP Balance Extremo
+
+Correção refeita porque a v0.8 pode ter ficado em cache ou não ter sido aplicada no GitHub Pages.
+
+Mudanças:
+- Fome agora desce em 0.012 por segundo fora da safe.
+- Sede agora desce em 0.016 por segundo fora da safe.
+- Na SAFE, fome e sede não descem.
+- Dano por fome/sede zeradas também foi reduzido.
+- Tela e HUD mostram v0.9 para confirmar que o arquivo certo está rodando.
+- index.html usa cache-buster novo no game.js.

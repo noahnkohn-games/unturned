@@ -1,6 +1,6 @@
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-const VERSION = 'v0.8 PVP BALANCE';
+const VERSION = 'v0.6 SAFE + CHAT + MAPA + KITS';
 
 const state = {
   started: false,
@@ -908,10 +908,18 @@ function updatePickups(dt) {
 }
 
 function updateSurvival(dt) {
-  state.hunger = Math.max(0, state.hunger - dt * 0.07);
-  state.thirst = Math.max(0, state.thirst - dt * 0.09);
+  // v0.9: balanceamento para PVP/raid.
+  // Na SAFE a fome e a sede não descem; fora dela descem muito devagar.
+  if (state.safe) return;
+
+  const HUNGER_DRAIN_PER_SECOND = 0.012; // 100 -> 0 em ~2h18min
+  const THIRST_DRAIN_PER_SECOND = 0.016; // 100 -> 0 em ~1h44min
+
+  state.hunger = Math.max(0, state.hunger - dt * HUNGER_DRAIN_PER_SECOND);
+  state.thirst = Math.max(0, state.thirst - dt * THIRST_DRAIN_PER_SECOND);
+
   if (state.hunger <= 0 || state.thirst <= 0) {
-    state.health = Math.max(0, state.health - dt * 5);
+    state.health = Math.max(0, state.health - dt * 2);
     if (state.health <= 0) endGame();
   }
 }
@@ -951,6 +959,8 @@ function updateHUD(dt) {
   document.getElementById('hungerText').textContent = Math.round(state.hunger);
   document.getElementById('thirstText').textContent = Math.round(state.thirst);
   document.getElementById('energyText').textContent = Math.round(state.energy);
+  const balanceLine = document.getElementById('survivalBalanceLine');
+  if (balanceLine) balanceLine.textContent = state.safe ? 'Fome/Sede: pausadas na SAFE' : 'Fome/Sede: modo PVP lento';
   document.getElementById('ammoText').textContent = getSelectedAmmoCount();
   document.getElementById('zombieText').textContent = zombies.length;
   document.getElementById('equippedText').textContent = slots[state.selected].label;
@@ -1424,8 +1434,8 @@ wireUI();
 // v0.7 BASES + AIRDROP + RAID PATCH
 // ==============================
 (() => {
-  const V07 = 'v0.8 PVP BALANCE - FOME/SEDE MAIS LENTAS';
-  document.title = 'Blockland Survival v0.8';
+  const V07 = 'v0.9 PVP BALANCE EXTREMO - FOME/SEDE QUASE PARADAS';
+  document.title = 'Blockland Survival v0.9';
   const versionEl = document.getElementById('version');
   if (versionEl) versionEl.textContent = V07;
   document.querySelectorAll('.brand h2').forEach(el => el.textContent = V07);
@@ -2303,5 +2313,460 @@ wireUI();
   };
 
   updateHeldModel(); updateKitButtons();
-  showMessage('v0.8 carregada: fome e sede agora descem bem mais devagar para dar tempo de PVP.');
+  showMessage('v0.7 carregada: zumbis perto das casas, base kit, airdrop, C4, carros, NPCs e PVP local.');
+})();
+
+
+// ==============================
+// v1.0 INVENTÁRIO ESTILO GRID (inspirado em survival grid UI)
+// ==============================
+(() => {
+  const V10 = 'v1.0 INVENTÁRIO EM GRADE';
+  document.title = 'Blockland Survival v1.0';
+  const versionEl = document.getElementById('version');
+  if (versionEl) versionEl.textContent = V10;
+  document.querySelectorAll('.brand h2').forEach(el => el.textContent = V10);
+
+  const panel = document.getElementById('inventoryPanel');
+  if (!panel) return;
+  panel.classList.add('ut-ready');
+  panel.innerHTML = `
+    <div class="overlay-head ut-head">
+      <div class="ut-tabs">
+        <div class="ut-tab active">Inventory [TAB]</div>
+        <div class="ut-tab">Craft [Y]</div>
+        <div class="ut-tab">Skills [U]</div>
+        <div class="ut-tab">Information [M]</div>
+      </div>
+      <button id="utCloseBtn" class="closeOverlay ut-close">ESC</button>
+    </div>
+    <p id="vaultHint" class="note ut-vault-hint"></p>
+    <div class="ut-body">
+      <div class="ut-panel ut-left">
+        <div class="ut-survivor-card">
+          <div class="ut-doll-name" id="utDollName">Survivor</div>
+          <div class="ut-paperdoll" id="utPaperdoll"></div>
+          <div class="ut-statline">
+            <span id="utStatHealth">HP 100</span>
+            <span id="utStatStamina">STM 100</span>
+            <span id="utStatFood">FOOD 100</span>
+            <span id="utStatWater">WATER 100</span>
+          </div>
+          <div class="ut-help">Arraste itens para organizar. Duplo clique equipa/usa. Clique direito dropa 1 item.</div>
+        </div>
+      </div>
+      <div class="ut-panel ut-center">
+        <div class="ut-section">
+          <div class="ut-section-title"><span>Hands</span><span id="utHandsCount"></span></div>
+          <div id="utHandsGrid" class="ut-grid compact"></div>
+        </div>
+        <div class="ut-section">
+          <div class="ut-section-title"><span>Backpack</span><span id="utBackpackCount"></span></div>
+          <div id="utBackpackGrid" class="ut-grid"></div>
+        </div>
+        <div class="ut-section">
+          <div class="ut-section-title"><span>Vault</span><span id="utVaultCount"></span></div>
+          <div id="utVaultGrid" class="ut-grid"></div>
+        </div>
+      </div>
+      <div class="ut-panel ut-right">
+        <div class="ut-section">
+          <div class="ut-section-title"><span>Nearby</span><span id="utNearbyCount"></span></div>
+          <div id="utNearbyGrid" class="ut-grid compact"></div>
+        </div>
+      </div>
+    </div>
+    <div id="inventoryTitle" style="display:none">Inventário</div>
+    <div id="inventoryList" style="display:none"></div>
+    <div id="vaultList" style="display:none"></div>
+  `;
+  document.getElementById('utCloseBtn').addEventListener('click', closeAllOverlays);
+
+  let tip = document.getElementById('utTooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'utTooltip';
+    document.body.appendChild(tip);
+  }
+
+  const SECTION_CFG = {
+    hands: { cols: 5, rows: 2, el: 'utHandsGrid', source: 'inventory' },
+    backpack: { cols: 8, rows: 7, el: 'utBackpackGrid', source: 'inventory' },
+    vault: { cols: 8, rows: 6, el: 'utVaultGrid', source: 'vault' },
+    nearby: { cols: 7, rows: 4, el: 'utNearbyGrid', source: 'nearby' },
+  };
+
+  const ITEM_SIZES = {
+    pistol:[2,1], viper:[3,1], maplestrike:[4,1], sniper:[5,1], minigun:[5,2], pdw:[3,1], caliRifle:[4,1], shotgun:[4,1],
+    axe:[1,2], ammo:[1,1], ammoRifle:[1,1], ammoSniper:[1,1], ammoMini:[2,1], ammoShotgun:[1,1],
+    water:[1,2], food:[1,1], wood:[2,1], stone:[1,1], tool:[1,1], gasoline:[1,2], turretAmmo:[2,1],
+    airdropLauncher:[3,2], c4Throwable:[1,1], c4Charge:[1,1], detonator:[2,1], baseKit:[3,3], claimFlag:[2,2],
+    generator:[3,2], bed:[2,2], safeBox:[2,2], wall:[2,1], door:[1,2], roof:[2,1], turret:[2,2]
+  };
+
+  const ITEM_ICON = {
+    pistol:'🔫', viper:'🔫', maplestrike:'🔫', sniper:'🎯', minigun:'💥', pdw:'🔫', caliRifle:'🔫', shotgun:'🔫', axe:'🪓',
+    ammo:'•', ammoRifle:'•', ammoSniper:'•', ammoMini:'•', ammoShotgun:'◼', water:'💧', food:'🥫', wood:'🪵', stone:'🪨', tool:'🧰',
+    airdropLauncher:'🚀', c4Throwable:'💣', c4Charge:'💣', detonator:'📟', baseKit:'🏗️', claimFlag:'🚩', gasoline:'⛽', turretAmmo:'📦',
+    generator:'⚡', bed:'🛏️', safeBox:'🗄️', wall:'🧱', door:'🚪', roof:'⬜', turret:'🔰'
+  };
+  const ITEM_KIND = {
+    pistol:'weapon', viper:'weapon', maplestrike:'weapon', sniper:'weapon', minigun:'weapon', pdw:'weapon', caliRifle:'weapon', shotgun:'weapon', axe:'weapon',
+    ammo:'ammo', ammoRifle:'ammo', ammoSniper:'ammo', ammoMini:'ammo', ammoShotgun:'ammo',
+    water:'supply', food:'supply', gasoline:'supply',
+    wood:'material', stone:'material', tool:'material', turretAmmo:'material',
+    airdropLauncher:'special',
+    c4Throwable:'explosive', c4Charge:'explosive', detonator:'explosive',
+    baseKit:'build', claimFlag:'build', generator:'build', bed:'build', safeBox:'build', wall:'build', door:'build', roof:'build', turret:'build'
+  };
+
+  state.invUi = loadJSON('blocklandInvUiV10', { placements:{}, vaultPlacements:{}, handsOrder:['pistol','axe'] });
+
+  function saveInvUi() {
+    localStorage.setItem('blocklandInvUiV10', JSON.stringify(state.invUi));
+  }
+
+  function inventoryEntries() {
+    return Object.entries(state.inventory).filter(([,qty]) => qty > 0);
+  }
+  function vaultEntries() {
+    return Object.entries(state.vault).filter(([,qty]) => qty > 0);
+  }
+  function getItemSize(type) {
+    return ITEM_SIZES[type] || [1,1];
+  }
+  function ensureStateUi() {
+    if (!state.invUi || typeof state.invUi !== 'object') state.invUi = { placements:{}, vaultPlacements:{} };
+    state.invUi.placements ||= {};
+    state.invUi.vaultPlacements ||= {};
+  }
+  function occupiedPlacements(source, section, ignoreType=null) {
+    const pool = source === 'vault' ? state.invUi.vaultPlacements : state.invUi.placements;
+    const data = source === 'vault' ? Object.fromEntries(vaultEntries()) : Object.fromEntries(inventoryEntries());
+    const out = [];
+    for (const [type, pl] of Object.entries(pool)) {
+      if (type === ignoreType) continue;
+      if (!data[type] || !pl || pl.section !== section) continue;
+      const [w,h] = getItemSize(type);
+      out.push({ type, x: pl.x, y: pl.y, w, h });
+    }
+    return out;
+  }
+  function canPlace(source, section, type, x, y, ignoreType=null) {
+    const cfg = SECTION_CFG[section];
+    if (!cfg) return false;
+    const [w,h] = getItemSize(type);
+    if (x < 0 || y < 0 || x + w > cfg.cols || y + h > cfg.rows) return false;
+    const occ = occupiedPlacements(source, section, ignoreType);
+    return !occ.some(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
+  }
+  function findFreeSpot(source, section, type, ignoreType=null) {
+    const cfg = SECTION_CFG[section];
+    if (!cfg) return null;
+    const [w,h] = getItemSize(type);
+    for (let y = 0; y <= cfg.rows - h; y++) {
+      for (let x = 0; x <= cfg.cols - w; x++) {
+        if (canPlace(source, section, type, x, y, ignoreType)) return { section, x, y };
+      }
+    }
+    return null;
+  }
+  function syncLayouts() {
+    ensureStateUi();
+    const invSet = new Set(inventoryEntries().map(([t]) => t));
+    const vaultSet = new Set(vaultEntries().map(([t]) => t));
+    for (const k of Object.keys(state.invUi.placements)) if (!invSet.has(k)) delete state.invUi.placements[k];
+    for (const k of Object.keys(state.invUi.vaultPlacements)) if (!vaultSet.has(k)) delete state.invUi.vaultPlacements[k];
+
+    for (const [type] of inventoryEntries()) {
+      let pl = state.invUi.placements[type];
+      if (pl && canPlace('inventory', pl.section, type, pl.x, pl.y, type)) continue;
+      const preferred = ['pistol','viper','maplestrike','sniper','minigun','pdw','caliRifle','shotgun','axe','detonator','airdropLauncher','c4Charge'].includes(type) ? 'hands' : 'backpack';
+      pl = findFreeSpot('inventory', preferred, type, type) || findFreeSpot('inventory', preferred === 'hands' ? 'backpack' : 'hands', type, type);
+      if (pl) state.invUi.placements[type] = pl;
+    }
+    for (const [type] of vaultEntries()) {
+      let pl = state.invUi.vaultPlacements[type];
+      if (pl && canPlace('vault', 'vault', type, pl.x, pl.y, type)) continue;
+      pl = findFreeSpot('vault', 'vault', type, type);
+      if (pl) state.invUi.vaultPlacements[type] = pl;
+    }
+    saveInvUi();
+  }
+
+  function currentNearby() {
+    const out = [];
+    const buckets = new Map();
+    pickups.forEach((p, idx) => {
+      if (!p?.mesh) return;
+      if (p.mesh.position.distanceTo(state.player) > 4.6) return;
+      const key = p.type;
+      if (!buckets.has(key)) buckets.set(key, { type:p.type, qty:0, indices:[] });
+      const b = buckets.get(key);
+      b.qty += p.qty || 1;
+      b.indices.push(idx);
+    });
+    buckets.forEach(v => out.push(v));
+    return out;
+  }
+
+  function buildDoll() {
+    const doll = document.getElementById('utPaperdoll');
+    if (!doll) return;
+    const skin = state.survivor.skin || '#d5b185';
+    const shirt = state.survivor.shirt || '#4f9cff';
+    doll.innerHTML = `
+      <div style="position:absolute;left:53px;top:22px;width:54px;height:54px;background:${skin};border-radius:10px 10px 12px 12px;border:2px solid rgba(0,0,0,.22)"></div>
+      <div style="position:absolute;left:50px;top:82px;width:60px;height:78px;background:${shirt};border-radius:12px;border:2px solid rgba(0,0,0,.22)"></div>
+      <div style="position:absolute;left:34px;top:87px;width:16px;height:80px;background:${skin};border-radius:10px;border:2px solid rgba(0,0,0,.22)"></div>
+      <div style="position:absolute;right:34px;top:87px;width:16px;height:80px;background:${skin};border-radius:10px;border:2px solid rgba(0,0,0,.22)"></div>
+      <div style="position:absolute;left:50px;top:160px;width:26px;height:74px;background:#55606e;border-radius:10px;border:2px solid rgba(0,0,0,.22)"></div>
+      <div style="position:absolute;left:84px;top:160px;width:26px;height:74px;background:#55606e;border-radius:10px;border:2px solid rgba(0,0,0,.22)"></div>
+      <div style="position:absolute;left:50px;top:228px;width:28px;height:12px;background:#242931;border-radius:8px"></div>
+      <div style="position:absolute;left:82px;top:228px;width:28px;height:12px;background:#242931;border-radius:8px"></div>
+      <div style="position:absolute;left:60px;top:41px;width:8px;height:8px;background:#111;border-radius:50%"></div>
+      <div style="position:absolute;left:91px;top:41px;width:8px;height:8px;background:#111;border-radius:50%"></div>
+      <div style="position:absolute;left:63px;top:58px;width:32px;height:4px;background:#111;border-radius:4px"></div>
+    `;
+    document.getElementById('utDollName').textContent = state.survivor.name || 'Survivor';
+    document.getElementById('utStatHealth').textContent = `HP ${Math.round(state.health)}`;
+    document.getElementById('utStatStamina').textContent = `STM ${Math.round(state.energy)}`;
+    document.getElementById('utStatFood').textContent = `FOOD ${Math.round(state.hunger)}`;
+    document.getElementById('utStatWater').textContent = `WATER ${Math.round(state.thirst)}`;
+  }
+
+  function makeGrid(el, cols, rows, compact=false, locked=false) {
+    el.innerHTML = '';
+    el.style.setProperty('--cols', cols);
+    el.style.setProperty('--rows', rows);
+    el.classList.toggle('compact', compact);
+    el.classList.toggle('locked', locked);
+    for (let i=0;i<cols*rows;i++) {
+      const c = document.createElement('div');
+      c.className = 'ut-cell';
+      el.appendChild(c);
+    }
+  }
+  function cellMetrics(el) {
+    const styles = getComputedStyle(el);
+    const cell = parseFloat(styles.getPropertyValue('--cell')) || 42;
+    const gap = parseFloat(styles.getPropertyValue('--gap')) || 4;
+    return { cell, gap };
+  }
+  function placePixels(el, x, y, w, h) {
+    const {cell, gap} = cellMetrics(el);
+    return {
+      left: 10 + x * (cell + gap),
+      top: 10 + y * (cell + gap),
+      width: w * cell + (w-1) * gap,
+      height: h * cell + (h-1) * gap,
+    };
+  }
+  function tooltipHtml(type, qty, where='') {
+    const name = labelOf(type);
+    const [w,h] = getItemSize(type);
+    return `<b>${name}</b><span>${qty}x · ${w}x${h}</span>${where ? `<span>${where}</span>` : ''}`;
+  }
+  function showTip(html, x, y) {
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    tip.style.left = (x + 14) + 'px';
+    tip.style.top = (y + 14) + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+
+  function renderSection(section) {
+    const cfg = SECTION_CFG[section];
+    const el = document.getElementById(cfg.el);
+    if (!el) return;
+    const locked = section === 'vault' && state.currentVaultMode === 'backpack';
+    makeGrid(el, cfg.cols, cfg.rows, section !== 'backpack' && section !== 'vault', locked);
+    const items = [];
+    if (section === 'vault') {
+      for (const [type, qty] of vaultEntries()) {
+        const pl = state.invUi.vaultPlacements[type];
+        if (!pl || pl.section !== 'vault') continue;
+        items.push({ owner:'vault', type, qty, x:pl.x, y:pl.y });
+      }
+    } else if (section === 'nearby') {
+      let x = 0, y = 0;
+      currentNearby().forEach((entry) => {
+        const [w,h] = getItemSize(entry.type);
+        items.push({ owner:'nearby', type:entry.type, qty:entry.qty, x, y, nearby:true });
+        x += Math.max(1, Math.min(w,2));
+        if (x >= cfg.cols-1) { x = 0; y += 2; }
+      });
+    } else {
+      for (const [type, qty] of inventoryEntries()) {
+        const pl = state.invUi.placements[type];
+        if (!pl || pl.section !== section) continue;
+        items.push({ owner:'inventory', type, qty, x:pl.x, y:pl.y });
+      }
+    }
+
+    items.forEach(item => {
+      const [w,h] = getItemSize(item.type);
+      const d = document.createElement('div');
+      d.className = 'ut-item';
+      d.dataset.type = item.type;
+      d.dataset.owner = item.owner;
+      d.dataset.section = section;
+      d.dataset.kind = ITEM_KIND[item.type] || 'material';
+      d.draggable = true;
+      const p = placePixels(el, item.x, item.y, Math.min(w,cfg.cols), Math.min(h,cfg.rows));
+      d.style.left = p.left + 'px';
+      d.style.top = p.top + 'px';
+      d.style.width = p.width + 'px';
+      d.style.height = p.height + 'px';
+      const cond = item.owner === 'nearby' ? '' : `<div class="cond"><i style="width:${Math.max(22, Math.min(100, (item.qty>0? (70 + (item.qty % 31)) : 70)))}%"></i></div>`;
+      d.innerHTML = `<span class="icon">${ITEM_ICON[item.type] || '⬛'}</span><span class="qty">${item.qty}</span>${cond}`;
+      d.addEventListener('mouseenter', e => showTip(tooltipHtml(item.type, item.qty, item.owner === 'vault' ? 'Vault' : item.owner === 'nearby' ? 'Perto de você' : section === 'hands' ? 'Na mão' : 'Na mochila'), e.clientX, e.clientY));
+      d.addEventListener('mousemove', e => showTip(tooltipHtml(item.type, item.qty, item.owner === 'vault' ? 'Vault' : item.owner === 'nearby' ? 'Perto de você' : section === 'hands' ? 'Na mão' : 'Na mochila'), e.clientX, e.clientY));
+      d.addEventListener('mouseleave', hideTip);
+      d.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type:item.type, owner:item.owner, section }));
+      });
+      d.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        if (item.owner === 'nearby') collectNearbyType(item.type);
+        else useInventoryItem(item.type);
+        if (state.inventoryOpen) renderInventory();
+      });
+      d.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (item.owner === 'inventory') { dropItem(item.type, 1); renderInventory(); }
+      });
+      d.addEventListener('click', () => { if (item.owner === 'nearby') { collectNearbyType(item.type); renderInventory(); } });
+      el.appendChild(d);
+    });
+
+    el.ondragover = handleDragOver;
+    el.ondragleave = () => { el.classList.remove('drop-ok','drop-bad'); };
+    el.ondrop = handleDropOnGrid;
+  }
+
+  function getGridCellFromEvent(el, e) {
+    const rect = el.getBoundingClientRect();
+    const {cell, gap} = cellMetrics(el);
+    const relX = e.clientX - rect.left - 10;
+    const relY = e.clientY - rect.top - 10;
+    const x = Math.max(0, Math.floor(relX / (cell + gap)));
+    const y = Math.max(0, Math.floor(relY / (cell + gap)));
+    return { x, y };
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    const el = e.currentTarget;
+    const section = Object.keys(SECTION_CFG).find(k => SECTION_CFG[k].el === el.id);
+    let payload;
+    try { payload = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch { payload = null; }
+    if (!payload?.type) return;
+    const {x,y} = getGridCellFromEvent(el, e);
+    let ok = true;
+    if (section === 'vault') {
+      if (state.currentVaultMode === 'backpack') ok = false;
+      else ok = canPlace('vault','vault',payload.type,x,y,payload.owner === 'vault' ? payload.type : null);
+    } else if (section === 'nearby') ok = false;
+    else ok = canPlace('inventory', section, payload.type, x, y, payload.owner === 'inventory' ? payload.type : null);
+    el.classList.toggle('drop-ok', !!ok);
+    el.classList.toggle('drop-bad', !ok);
+  }
+
+  function handleDropOnGrid(e) {
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.classList.remove('drop-ok','drop-bad');
+    const section = Object.keys(SECTION_CFG).find(k => SECTION_CFG[k].el === el.id);
+    let payload;
+    try { payload = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch { payload = null; }
+    if (!payload?.type) return;
+    if (section === 'nearby') return;
+    const {x,y} = getGridCellFromEvent(el, e);
+
+    if (payload.owner === 'nearby') {
+      collectNearbyType(payload.type);
+      syncLayouts();
+      const target = section === 'vault' ? 'backpack' : section;
+      if (state.inventory[payload.type] > 0 && canPlace('inventory', target, payload.type, x, y, payload.type)) state.invUi.placements[payload.type] = { section:target, x, y };
+      saveInvUi();
+      renderInventory();
+      return;
+    }
+
+    if (payload.owner === 'inventory') {
+      const qty = state.inventory[payload.type] || 0;
+      if (qty <= 0) return;
+      if (section === 'vault') {
+        if (state.currentVaultMode === 'backpack') return showMessage('Vault só na SAFE ou com /vault.');
+        moveToVault(payload.type, qty);
+        syncLayouts();
+        if (state.vault[payload.type] && canPlace('vault','vault', payload.type, x, y, payload.type)) state.invUi.vaultPlacements[payload.type] = { section:'vault', x, y };
+      } else if (canPlace('inventory', section, payload.type, x, y, payload.type)) {
+        state.invUi.placements[payload.type] = { section, x, y };
+        if (section === 'hands') {
+          const idx = slots.findIndex(s => s.id === payload.type);
+          if (idx >= 0) { state.selected = idx; updateHeldModel(); }
+        }
+      } else return;
+    } else if (payload.owner === 'vault') {
+      const qty = state.vault[payload.type] || 0;
+      if (qty <= 0) return;
+      if (section === 'vault') {
+        if (canPlace('vault','vault', payload.type, x, y, payload.type)) state.invUi.vaultPlacements[payload.type] = { section:'vault', x, y };
+        else return;
+      } else {
+        moveFromVault(payload.type, qty);
+        syncLayouts();
+        if (canPlace('inventory', section, payload.type, x, y, payload.type)) state.invUi.placements[payload.type] = { section, x, y };
+      }
+    }
+    saveInvUi();
+    renderInventory();
+  }
+
+  function collectNearbyType(type) {
+    const targets = pickups.filter(p => p?.mesh && p.type === type && p.mesh.position.distanceTo(state.player) <= 4.6);
+    targets.forEach(p => collectPickup(p));
+  }
+
+  const _oldRenderInventoryV10 = renderInventory;
+  renderInventory = function() {
+    syncLayouts();
+    document.getElementById('inventoryTitle').textContent = 'Inventário em grade';
+    const mode = state.currentVaultMode;
+    const hint = mode === 'safe'
+      ? 'Na SAFE você pode organizar a mochila e o vault grande. O vault persiste após morrer.'
+      : mode === 'small'
+        ? 'Fora da SAFE, /vault abre um vault remoto menor. Arraste itens para organizar.'
+        : 'Mochila aberta. O vault fica bloqueado fora da SAFE; arraste itens para reorganizar.';
+    document.getElementById('vaultHint').textContent = hint;
+    buildDoll();
+    renderSection('hands');
+    renderSection('backpack');
+    renderSection('vault');
+    renderSection('nearby');
+    const invCount = inventoryEntries().reduce((a,[,q])=>a+q,0);
+    const vaultCount = vaultEntries().reduce((a,[,q])=>a+q,0);
+    const nearbyCount = currentNearby().reduce((a,x)=>a+x.qty,0);
+    const handsCount = inventoryEntries().filter(([t]) => state.invUi.placements[t]?.section === 'hands').reduce((a,[,q])=>a+q,0);
+    document.getElementById('utHandsCount').textContent = `${handsCount} itens`;
+    document.getElementById('utBackpackCount').textContent = `${invCount} total`;
+    document.getElementById('utVaultCount').textContent = `${vaultCount} total`;
+    document.getElementById('utNearbyCount').textContent = `${nearbyCount} total`;
+  };
+
+  const _oldAddItemV10 = addItem;
+  addItem = function(type, qty) { _oldAddItemV10(type, qty); syncLayouts(); saveInvUi(); };
+  const _oldMoveToVaultV10 = moveToVault;
+  moveToVault = function(type, qty) { _oldMoveToVaultV10(type, qty); syncLayouts(); saveInvUi(); };
+  const _oldMoveFromVaultV10 = moveFromVault;
+  moveFromVault = function(type, qty) { _oldMoveFromVaultV10(type, qty); syncLayouts(); saveInvUi(); };
+  const _oldDropItemV10 = dropItem;
+  dropItem = function(type, qty=1) { _oldDropItemV10(type, qty); syncLayouts(); saveInvUi(); };
+  const _oldCollectPickupV10 = collectPickup;
+  collectPickup = function(p) { _oldCollectPickupV10(p); syncLayouts(); saveInvUi(); };
+
+  showMessage('v1.0: inventário agora usa grade estilo survival, com ícones, hover e arrastar/soltar.');
 })();

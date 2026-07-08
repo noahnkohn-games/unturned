@@ -1,6 +1,6 @@
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-const VERSION = 'v0.6 SAFE + CHAT + MAPA + KITS';
+const VERSION = 'v0.8 PVP BALANCE';
 
 const state = {
   started: false,
@@ -908,8 +908,8 @@ function updatePickups(dt) {
 }
 
 function updateSurvival(dt) {
-  state.hunger = Math.max(0, state.hunger - dt * 0.55);
-  state.thirst = Math.max(0, state.thirst - dt * 0.75);
+  state.hunger = Math.max(0, state.hunger - dt * 0.07);
+  state.thirst = Math.max(0, state.thirst - dt * 0.09);
   if (state.hunger <= 0 || state.thirst <= 0) {
     state.health = Math.max(0, state.health - dt * 5);
     if (state.health <= 0) endGame();
@@ -1418,3 +1418,890 @@ window.addEventListener('keyup', onKeyUp);
 window.addEventListener('mousemove', onMouseMove);
 window.addEventListener('mousedown', onMouseDown);
 wireUI();
+
+
+// ==============================
+// v0.7 BASES + AIRDROP + RAID PATCH
+// ==============================
+(() => {
+  const V07 = 'v0.8 PVP BALANCE - FOME/SEDE MAIS LENTAS';
+  document.title = 'Blockland Survival v0.8';
+  const versionEl = document.getElementById('version');
+  if (versionEl) versionEl.textContent = V07;
+  document.querySelectorAll('.brand h2').forEach(el => el.textContent = V07);
+
+  const hud = document.getElementById('hud');
+  if (hud && !document.getElementById('xpLine')) {
+    const xp = document.createElement('div'); xp.id = 'xpLine'; xp.textContent = 'XP: 0'; hud.appendChild(xp);
+    const veh = document.createElement('div'); veh.id = 'vehicleLine'; veh.textContent = 'CARRO'; hud.appendChild(veh);
+    const raid = document.createElement('div'); raid.id = 'raidLine'; raid.textContent = 'Base: sem base · Airdrop: nenhum'; hud.appendChild(raid);
+  }
+
+  if (!document.getElementById('npcPanel')) {
+    const npc = document.createElement('div');
+    npc.id = 'npcPanel';
+    npc.className = 'overlay small-overlay';
+    npc.innerHTML = `
+      <div class="overlay-head"><b id="npcTitle">NPC</b><button class="closeOverlay">ESC</button></div>
+      <p id="npcText" class="note"></p>
+      <div id="npcShop" class="npc-shop-grid"></div>
+    `;
+    document.body.appendChild(npc);
+  }
+
+  const kitsGrid = document.querySelector('#kitsPanel .kit-grid');
+  if (kitsGrid) {
+    kitsGrid.insertAdjacentHTML('beforeend', `
+      <button data-kit="base"><b>Base Kit</b><span>3 paredes, porta, teto, cofre, gerador, cama, 2 torretas</span></button>
+      <button data-kit="airdrop"><b>Airdrop Kit</b><span>Lançador de airdrop + sinalizador do mapa</span></button>
+      <button data-kit="cali"><b>California Pack</b><span>Armas extras inspiradas em servidores survival</span></button>
+    `);
+  }
+
+  // Estado novo
+  Object.assign(state, {
+    xp: Number(localStorage.getItem('blocklandXPV07') || '0'),
+    respawn: null,
+    vehicle: null,
+    vehicles: [],
+    bases: [],
+    npcOpen: false,
+    kitCooldowns: loadJSON('blocklandKitCooldownsV07', {}),
+    airdrops: [],
+    activeC4: [],
+    armedC4: null,
+    lastInteractAt: 0,
+  });
+
+  Object.assign(state.inventory, {
+    minigun: state.inventory.minigun || 0,
+    pdw: state.inventory.pdw || 0,
+    caliRifle: state.inventory.caliRifle || 0,
+    shotgun: state.inventory.shotgun || 0,
+    ammoMini: state.inventory.ammoMini || 0,
+    ammoShotgun: state.inventory.ammoShotgun || 0,
+    airdropLauncher: state.inventory.airdropLauncher || 0,
+    c4Throwable: state.inventory.c4Throwable || 0,
+    c4Charge: state.inventory.c4Charge || 0,
+    detonator: state.inventory.detonator || 0,
+    baseKit: state.inventory.baseKit || 0,
+    claimFlag: state.inventory.claimFlag || 0,
+    gasoline: state.inventory.gasoline || 0,
+    turretAmmo: state.inventory.turretAmmo || 0,
+  });
+
+  slots.splice(0, slots.length,
+    { id: 'pistol', label: 'Pistolinha', use: 'weapon' },
+    { id: 'viper', label: 'Viper', use: 'weapon' },
+    { id: 'maplestrike', label: 'MapleStrike', use: 'weapon' },
+    { id: 'sniper', label: 'Sniper', use: 'weapon' },
+    { id: 'minigun', label: 'Minigun', use: 'weapon' },
+    { id: 'pdw', label: 'Cali PDW', use: 'weapon' },
+    { id: 'axe', label: 'Machado', use: 'axe' },
+    { id: 'airdropLauncher', label: 'Airdrop', use: 'airdrop' },
+    { id: 'c4Charge', label: 'C4 Porta', use: 'c4' },
+    { id: 'detonator', label: 'Detonador', use: 'detonator' }
+  );
+  if (state.selected >= slots.length) state.selected = 0;
+
+  Object.assign(weaponDefs, {
+    minigun: { label: 'Minigun', ammo: 'ammoMini', damage: 18, range: 70, stun: 0.28, spread: 0.035, color: 0xffe477, sound: 'minigun' },
+    pdw: { label: 'Cali PDW', ammo: 'ammoRifle', damage: 28, range: 54, stun: 0.45, spread: 0.018, color: 0x79f0ff, sound: 'viper' },
+    caliRifle: { label: 'Cali Ranger', ammo: 'ammoRifle', damage: 42, range: 74, stun: 0.9, spread: 0.009, color: 0x98ff70, sound: 'rifle' },
+    shotgun: { label: 'Cali Shotgun', ammo: 'ammoShotgun', damage: 75, range: 24, stun: 1.1, spread: 0.06, color: 0xffa95e, sound: 'shotgun' },
+  });
+
+  const itemSizes = {
+    pistol:[2,1], viper:[3,1], maplestrike:[4,1], sniper:[5,1], minigun:[5,2], pdw:[3,1], caliRifle:[4,1], shotgun:[4,1],
+    axe:[2,2], ammo:[1,1], ammoRifle:[1,1], ammoSniper:[1,1], ammoMini:[2,1], ammoShotgun:[1,1],
+    water:[1,2], food:[1,1], wood:[2,1], stone:[1,1], tool:[1,1], gasoline:[1,2], turretAmmo:[2,1],
+    airdropLauncher:[3,2], c4Throwable:[1,1], c4Charge:[1,1], detonator:[2,1], baseKit:[3,3], claimFlag:[2,2], hands:[1,1]
+  };
+
+  const V07_LABELS = {
+    ammo: 'Munição pistola', ammoRifle: 'Munição rifle', ammoSniper: 'Munição sniper', ammoMini: 'Munição minigun', ammoShotgun: 'Cartuchos',
+    viper: 'Viper', maplestrike: 'MapleStrike', sniper: 'Sniper', minigun: 'Minigun', pdw: 'Cali PDW', caliRifle: 'Cali Ranger', shotgun: 'Cali Shotgun',
+    pistol: 'Pistolinha', axe: 'Machado', water: 'Água', food: 'Comida', wood: 'Madeira', stone: 'Pedra', tool: 'Ferramenta',
+    airdropLauncher: 'Lançador Airdrop', c4Throwable: 'C4 lançável', c4Charge: 'C4 de porta', detonator: 'Detonador', baseKit: 'Kit Base', claimFlag: 'Bandeira Claim', gasoline: 'Gasolina', turretAmmo: 'Munição torreta', hands: 'Mãos'
+  };
+
+  // Materiais extras
+  Object.assign(mats, {
+    red: new THREE.MeshLambertMaterial({ color: 0xb93232 }),
+    orange: new THREE.MeshLambertMaterial({ color: 0xff8c2e }),
+    darkMetal: new THREE.MeshLambertMaterial({ color: 0x24282e }),
+    glass: new THREE.MeshLambertMaterial({ color: 0x7ddcff, transparent: true, opacity: 0.55 }),
+    blueGlow: new THREE.MeshBasicMaterial({ color: 0x58d7ff }),
+    claim: new THREE.MeshLambertMaterial({ color: 0xffd86a }),
+    car: new THREE.MeshLambertMaterial({ color: 0x4f73a8 }),
+    npc: new THREE.MeshLambertMaterial({ color: 0x7954d8 }),
+    turret: new THREE.MeshLambertMaterial({ color: 0x2f3439 }),
+    c4: new THREE.MeshLambertMaterial({ color: 0x3a3a3a }),
+  });
+
+  function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch (_) { return fallback; } }
+  function saveKitCooldowns() { localStorage.setItem('blocklandKitCooldownsV07', JSON.stringify(state.kitCooldowns)); }
+  function saveXP() { localStorage.setItem('blocklandXPV07', String(Math.max(0, Math.floor(state.xp)))); }
+  function addXP(amount, reason) { state.xp += amount; saveXP(); showMessage(`+${amount} XP ${reason || ''}`.trim()); }
+
+  labelOf = function(type) { return V07_LABELS[type] || type; };
+
+  function near(a, b, radius) {
+    const dx = a.x - b.x, dz = a.z - b.z;
+    return Math.sqrt(dx*dx + dz*dz) <= radius;
+  }
+  function flatDist(a,b) { const dx=a.x-b.x, dz=a.z-b.z; return Math.sqrt(dx*dx+dz*dz); }
+
+  const oldMakePickupMesh = makePickupMesh;
+  makePickupMesh = function(type) {
+    const group = new THREE.Group();
+    let mesh;
+    if (['minigun','pdw','caliRifle','shotgun'].includes(type)) {
+      mesh = new THREE.Group();
+      const length = type === 'minigun' ? 1.75 : type === 'shotgun' ? 1.45 : type === 'caliRifle' ? 1.55 : 1.05;
+      const body = box(0.32, 0.28, length, type === 'minigun' ? mats.darkMetal : mats.metal);
+      const grip = box(0.20, 0.55, 0.18, mats.pistol); grip.position.set(0, -0.34, 0.22);
+      const barrel = box(0.12, 0.12, length * 0.55, mats.black); barrel.position.set(0, 0.06, -length * 0.62);
+      mesh.add(body, grip, barrel);
+      if (type === 'minigun') {
+        for (let i=0;i<4;i++) { const b=box(0.08,0.08,0.72,mats.black); b.position.set(Math.cos(i*Math.PI/2)*0.11, Math.sin(i*Math.PI/2)*0.11 + .06, -1.1); mesh.add(b); }
+      }
+    } else if (['airdropLauncher'].includes(type)) {
+      mesh = new THREE.Group();
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,1.45,12), mats.darkMetal); tube.rotation.x = Math.PI/2; tube.position.z = -0.1;
+      const sight = box(0.16,0.12,0.34,mats.blueGlow); sight.position.set(0,.24,-.28);
+      mesh.add(tube, sight);
+    } else if (['c4Throwable','c4Charge'].includes(type)) {
+      mesh = new THREE.Group();
+      const pack = box(0.62,0.34,0.48,mats.c4);
+      const tape = box(0.68,0.08,0.52,mats.red); tape.position.y=.02;
+      const light = box(0.12,0.12,0.06,mats.blueGlow); light.position.set(.22,.21,-.25);
+      mesh.add(pack,tape,light);
+    } else if (type === 'detonator') {
+      mesh = new THREE.Group();
+      const base = box(0.45,0.62,0.25,mats.darkMetal);
+      const btn = box(0.22,0.10,0.12,mats.red); btn.position.y=.36;
+      const ant = box(0.05,0.62,0.05,mats.black); ant.position.set(.22,.46,0);
+      mesh.add(base,btn,ant);
+    } else if (['baseKit','claimFlag','gasoline','turretAmmo','ammoMini','ammoShotgun'].includes(type)) {
+      if (type === 'gasoline') {
+        mesh = new THREE.Group();
+        const can = box(.55,.75,.35,mats.red); const cap=box(.18,.12,.18,mats.black); cap.position.set(.18,.45,0); mesh.add(can,cap);
+      } else if (type === 'claimFlag') {
+        mesh = new THREE.Group(); const pole=box(.08,1.2,.08,mats.metal); const flag=box(.62,.38,.06,mats.claim); flag.position.set(.35,.35,0); mesh.add(pole,flag);
+      } else {
+        mesh = box(type==='baseKit'?0.9:0.65, type==='baseKit'?0.75:0.35, type==='baseKit'?0.9:0.45, type==='turretAmmo'?mats.darkMetal:mats.metal);
+      }
+    } else {
+      return oldMakePickupMesh(type);
+    }
+    group.add(mesh);
+    group.userData.type = type;
+    return group;
+  };
+
+  randomLootType = function(rareTools = true) {
+    const table = [
+      ['ammo',14], ['ammoRifle',15], ['ammoSniper',6], ['ammoMini',4], ['ammoShotgun',5],
+      ['food',10], ['water',10], ['wood',6], ['stone',6], ['tool',4], ['gasoline',3], ['turretAmmo',2],
+      ['pistol',3], ['viper',3], ['maplestrike',2.4], ['sniper',1.5], ['pdw',2.2], ['caliRifle',1.7], ['shotgun',1.5], ['minigun',0.6],
+      ['airdropLauncher',0.45], ['c4Throwable',0.75], ['c4Charge',0.65], ['detonator',0.35], ['axe',1.2], ['claimFlag',0.35]
+    ];
+    let total = table.reduce((s, r) => s + r[1], 0), roll = Math.random() * total;
+    for (const [type, weight] of table) { roll -= weight; if (roll <= 0) return type; }
+    return 'ammo';
+  };
+
+  zombieDropLoot = function(z) {
+    const base = z.group.position.clone();
+    const guaranteed = ['ammo','ammoRifle','food','water'];
+    guaranteed.forEach((type, i) => spawnPickup(type, type.includes('ammo') ? 6 + Math.floor(Math.random()*12) : 1, scatterV07(base, i)));
+    const count = 3 + Math.floor(Math.random()*5);
+    for (let i=0; i<count; i++) {
+      const type = randomLootType(true);
+      let qty = 1;
+      if (type === 'ammo') qty = 5 + Math.floor(Math.random()*12);
+      if (type === 'ammoRifle') qty = 8 + Math.floor(Math.random()*18);
+      if (type === 'ammoSniper') qty = 1 + Math.floor(Math.random()*5);
+      if (type === 'ammoMini') qty = 20 + Math.floor(Math.random()*45);
+      if (type === 'ammoShotgun') qty = 4 + Math.floor(Math.random()*10);
+      if (type === 'wood' || type === 'stone') qty = 2 + Math.floor(Math.random()*4);
+      if (type === 'turretAmmo') qty = 25 + Math.floor(Math.random()*40);
+      if (type === 'gasoline') qty = 1 + Math.floor(Math.random()*2);
+      spawnPickup(type, qty, scatterV07(base, i+4));
+    }
+  };
+  function scatterV07(base, i=0) { const a = i*1.7 + Math.random(); const r = 1.2 + Math.random()*3; return new THREE.Vector3(base.x + Math.cos(a)*r, 0, base.z + Math.sin(a)*r); }
+
+  // Reinicia zumbis e restringe perto das casas.
+  function pickZombieHome() {
+    const h = houses[Math.floor(Math.random() * houses.length)];
+    const a = Math.random() * Math.PI * 2;
+    const r = 7 + Math.random() * 14;
+    return { house: h, x: h.x + Math.cos(a) * r, z: h.z + Math.sin(a) * r };
+  }
+  spawnZombie = function(initial = false) {
+    const home = pickZombieHome();
+    let x = home.x, z = home.z;
+    if (isInSafeZone(new THREE.Vector3(x, 0, z))) return spawnZombie(initial);
+    const parts = createZombieMesh();
+    parts.group.position.set(x, terrainHeight(x, z), z);
+    scene.add(parts.group);
+    zombies.push({ ...parts, hp: 100, speed: 3.9 + Math.random()*1.15, attackCooldown: 0, stun: 0, alive: true, phase: Math.random()*10, homeX: home.house.x, homeZ: home.house.z, roamRadius: 24 + Math.random()*8 });
+  };
+  for (let i = zombies.length - 1; i >= 0; i--) { scene.remove(zombies[i].group); zombies.splice(i,1); }
+  for (let i=0;i<14;i++) spawnZombie(true);
+
+  const oldUpdateZombies = updateZombies;
+  updateZombies = function(dt) {
+    // Versão parecida com a original, mas zumbi não abandona a área das casas.
+    for (const z of zombies) {
+      if (!z.alive) continue;
+      z.phase += dt * 6;
+      z.attackCooldown = Math.max(0, z.attackCooldown - dt);
+      const zp = z.group.position;
+      if (isInSafeZone(zp)) {
+        const away = zp.clone().sub(new THREE.Vector3(safeZone.x, zp.y, safeZone.z)); away.y = 0; if (away.lengthSq()<.01) away.set(1,0,0); away.normalize();
+        zp.x = safeZone.x + away.x * (safeZone.radius + 1.8); zp.z = safeZone.z + away.z * (safeZone.radius + 1.8); zp.y = terrainHeight(zp.x,zp.z);
+      }
+      const home = new THREE.Vector3(z.homeX || 0, 0, z.homeZ || 0);
+      const distHome = flatDist(zp, home);
+      const dirToPlayer = state.player.clone().sub(zp); dirToPlayer.y = 0;
+      const dist = dirToPlayer.length();
+      const canChase = !state.safe && dist < 42 && distHome < (z.roamRadius || 28);
+      if (z.stun > 0) {
+        z.stun -= dt; z.stars.visible = true; z.stars.rotation.y += dt * 7; z.armL.rotation.x = -0.9; z.armR.rotation.x = -0.9;
+        if (z.stun <= 0) { z.stars.visible = false; z.head.material = mats.zombie; }
+      } else {
+        let dir = new THREE.Vector3();
+        if (canChase && dirToPlayer.lengthSq() > .01) dir.copy(dirToPlayer).normalize();
+        else if (distHome > 5) dir.copy(home.sub(zp)).setY(0).normalize();
+        else if (Math.random() < dt * .25) { const a=Math.random()*Math.PI*2; dir.set(Math.cos(a),0,Math.sin(a)); }
+        if (dir.lengthSq() > 0) {
+          zp.addScaledVector(dir, z.speed * (canChase ? 1 : .35) * dt); zp.y = terrainHeight(zp.x,zp.z); z.group.rotation.y = Math.atan2(dir.x,dir.z);
+          if (canChase && Math.random() < dt * 0.22) playSound('zombie');
+        }
+        const walk = Math.sin(z.phase) * 0.55; z.legL.rotation.x = walk; z.legR.rotation.x = -walk; z.armL.rotation.x = -0.55 - walk*.25; z.armR.rotation.x = -0.55 + walk*.25;
+      }
+      if (!state.safe && dist < 2.05 && z.stun <= 0 && z.attackCooldown <= 0) {
+        state.health = Math.max(0, state.health - 8); z.attackCooldown = 0.85; playSound('hurt'); showMessage('Zumbi te atacou!'); if (state.health <= 0) endGame();
+      }
+    }
+  };
+
+  const oldKillZombie = killZombie;
+  killZombie = function(z) {
+    if (!z.alive) return;
+    z.alive = false;
+    scene.remove(z.group);
+    zombieDropLoot(z);
+    const idx = zombies.indexOf(z); if (idx >= 0) zombies.splice(idx, 1);
+    addXP(10, 'PVE');
+    showMessage('Zumbi eliminado! Dropou loot completo.');
+  };
+
+  // NPCs e casas da SAFE
+  const npcs = [];
+  function addNpcHouse(name, role, x, z, color) {
+    addHouse(x, z, color);
+    const npc = createNpcMesh(role);
+    npc.position.set(x + 2.4, terrainHeight(x+2.4,z-2.4), z - 2.4);
+    scene.add(npc);
+    npcs.push({ name, role, mesh: npc, position: npc.position.clone() });
+  }
+  function createNpcMesh(role) {
+    const g = new THREE.Group();
+    const body = box(1.0,1.65,.65, role==='Mecânico'?mats.orange:role==='Armeiro'?mats.darkMetal:mats.npc); body.position.y=1.45;
+    const head = box(.82,.82,.82,mats.hand); head.position.y=2.85;
+    const eye1=box(.12,.12,.04,mats.black); eye1.position.set(-.18,2.92,-.43); const eye2=eye1.clone(); eye2.position.x=.18;
+    const cap=box(.92,.18,.92, role==='Mecânico'?mats.red:mats.claim); cap.position.y=3.35;
+    g.add(body,head,eye1,eye2,cap); return g;
+  }
+  addNpcHouse('Tina', 'Trader', safeZone.x - 13, safeZone.z - 8, 0x5a745f);
+  addNpcHouse('Mauro', 'Mecânico', safeZone.x + 13, safeZone.z - 7, 0x6b6554);
+  addNpcHouse('Bruno', 'Armeiro', safeZone.x + 3, safeZone.z + 13, 0x596271);
+
+  function openNpc(npc) {
+    closeAllOverlays();
+    state.npcOpen = true;
+    document.exitPointerLock?.();
+    const panel = document.getElementById('npcPanel');
+    const title = document.getElementById('npcTitle');
+    const text = document.getElementById('npcText');
+    const shop = document.getElementById('npcShop');
+    title.textContent = `${npc.name} — ${npc.role}`;
+    text.textContent = `Troca XP por itens. Seu XP: ${Math.floor(state.xp)}. XP vem de PVE e PVP.`;
+    shop.innerHTML = '';
+    const offers = npc.role === 'Mecânico'
+      ? [['gasoline', 5, 18], ['tool', 1, 14], ['turretAmmo', 60, 26]]
+      : npc.role === 'Armeiro'
+        ? [['ammoRifle', 80, 22], ['ammoMini', 120, 34], ['c4Charge', 1, 45], ['detonator', 1, 40]]
+        : [['water', 3, 8], ['food', 3, 8], ['wood', 8, 12], ['claimFlag', 1, 28]];
+    offers.forEach(([type, qty, xp]) => {
+      const b = document.createElement('button');
+      b.innerHTML = `<b>${qty}x ${labelOf(type)}</b><span>Custa ${xp} XP</span>`;
+      b.addEventListener('click', () => {
+        if (state.xp < xp) return showMessage('XP insuficiente. Faça PVE/PVP.');
+        state.xp -= xp; saveXP(); addItem(type, qty); playSound('pickup'); openNpc(npc); showMessage(`Comprou ${labelOf(type)}.`);
+      });
+      shop.appendChild(b);
+    });
+    panel.classList.add('open');
+  }
+
+  function nearestNpc() {
+    let best=null, d=Infinity;
+    for (const n of npcs) { const dd = n.position.distanceTo(state.player); if (dd < d) { d=dd; best=n; } }
+    return d < 4 ? best : null;
+  }
+
+  // Veículos dirigíveis
+  function createVehicle(name, x, z, color=0x4f73a8) {
+    const g = new THREE.Group();
+    const body = box(3.2,1.0,5.0,new THREE.MeshLambertMaterial({color})); body.position.y=1.0;
+    const cab = box(2.4,1.1,2.1,mats.glass); cab.position.set(0,1.75,-.6);
+    const wheels=[]; for (const sx of [-1.45,1.45]) for (const sz of [-1.65,1.65]) { const w=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.36,12),mats.black); w.rotation.z=Math.PI/2; w.position.set(sx,.45,sz); wheels.push(w); }
+    g.add(body,cab,...wheels); g.position.set(x, terrainHeight(x,z), z); scene.add(g);
+    const v = { name, mesh:g, position:g.position, fuel: 65 + Math.random()*35, speed:0, yaw:0, driver:false };
+    state.vehicles.push(v); return v;
+  }
+  createVehicle('Hatchback Azul', -50, 46, 0x377dc9);
+  createVehicle('Pickup Verde', 52, 42, 0x3a8f5c);
+  createVehicle('Van Bege', -16, -54, 0xb89d71);
+
+  function nearestVehicle() {
+    let best=null, d=Infinity;
+    for (const v of state.vehicles) { const dd = v.mesh.position.distanceTo(state.player); if (dd < d) { d=dd; best=v; } }
+    return d < 4.2 ? best : null;
+  }
+  function enterExitVehicle(forceExit=false) {
+    if (state.vehicle) {
+      const v=state.vehicle; v.driver=false; state.vehicle=null;
+      const out = v.mesh.position.clone().add(new THREE.Vector3(2.5,2,0)); out.y=terrainHeight(out.x,out.z)+2;
+      state.player.copy(out); showMessage('Saiu do carro.'); return true;
+    }
+    if (forceExit) return false;
+    const v=nearestVehicle();
+    if (!v) return false;
+    state.vehicle=v; v.driver=true; state.player.copy(v.mesh.position.clone().add(new THREE.Vector3(0,2.2,0))); showMessage('Entrou no carro. X para sair. Gasolina gasta ao dirigir.'); return true;
+  }
+
+  const oldUpdateMovement = updateMovement;
+  updateMovement = function(dt) {
+    if (!state.vehicle) return oldUpdateMovement(dt);
+    const v = state.vehicle;
+    const turnL = state.keys.has('KeyA') || state.keys.has('ArrowLeft');
+    const turnR = state.keys.has('KeyD') || state.keys.has('ArrowRight');
+    const accel = state.keys.has('KeyW') || state.keys.has('ArrowUp');
+    const brake = state.keys.has('KeyS') || state.keys.has('ArrowDown');
+    if (turnL) v.yaw += dt * 1.8;
+    if (turnR) v.yaw -= dt * 1.8;
+    if (accel && v.fuel > 0) { v.speed = Math.min(15, v.speed + dt * 9); v.fuel = Math.max(0, v.fuel - dt * 1.6); }
+    else if (brake && v.fuel > 0) { v.speed = Math.max(-6, v.speed - dt * 8); v.fuel = Math.max(0, v.fuel - dt * .8); }
+    else v.speed *= Math.pow(.90, dt * 8);
+    if (v.fuel <= 0 && Math.abs(v.speed) > .1) { v.speed *= .92; if (Math.random()<dt*2) showMessage('Carro sem gasolina!'); }
+    const dir = new THREE.Vector3(-Math.sin(v.yaw),0,-Math.cos(v.yaw));
+    v.mesh.position.addScaledVector(dir, v.speed * dt);
+    v.mesh.position.x = THREE.MathUtils.clamp(v.mesh.position.x, -86, 86); v.mesh.position.z = THREE.MathUtils.clamp(v.mesh.position.z, -86, 86);
+    v.mesh.position.y = terrainHeight(v.mesh.position.x,v.mesh.position.z); v.mesh.rotation.y = v.yaw;
+    state.player.copy(v.mesh.position.clone().add(new THREE.Vector3(0,2.3,0)));
+    camera.position.copy(state.player); camera.rotation.order='YXZ'; camera.rotation.y=state.yaw; camera.rotation.x=state.pitch;
+    state.safe = isInSafeZone(state.player);
+  };
+
+  // Bases: kit base gera uma base pronta, flag impede construção em volta.
+  function canBuildAt(pos) {
+    if (isInSafeZone(pos)) return { ok:false, reason:'Não pode construir dentro da SAFE.' };
+    for (const b of state.bases) if (b.flag && flatDist(pos,b.flag.position) < 24) return { ok:false, reason:'Bandeira claim bloqueia construção aqui.' };
+    return { ok:true };
+  }
+  function buildBaseAt(pos, owner='Você') {
+    const check = canBuildAt(pos); if (!check.ok) { showMessage(check.reason); return false; }
+    const y = terrainHeight(pos.x,pos.z);
+    const g = new THREE.Group(); g.position.set(pos.x,y,pos.z);
+    const wallMat = new THREE.MeshLambertMaterial({ color: owner==='Você'?0x7d5735:0x654232 });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x3b3028 });
+    const floor = box(8.4,.22,8.4,mats.wood); floor.position.y=.11;
+    const wall1=box(8.4,3,.35,wallMat); wall1.position.set(0,1.7,-4.2);
+    const wall2=box(.35,3,8.4,wallMat); wall2.position.set(-4.2,1.7,0);
+    const wall3=box(.35,3,8.4,wallMat); wall3.position.set(4.2,1.7,0);
+    const doorWall=box(3.1,3,.35,wallMat); doorWall.position.set(-2.65,1.7,4.2);
+    const doorWall2=box(3.1,3,.35,wallMat); doorWall2.position.set(2.65,1.7,4.2);
+    const roof=box(8.8,.35,8.8,roofMat); roof.position.y=3.35;
+    const door=box(2.0,2.7,.28,new THREE.MeshLambertMaterial({color:0x2f241c})); door.position.set(0,1.45,4.35);
+    const vaultMesh=box(1.3,1.25,1.3,mats.darkMetal); vaultMesh.position.set(-2.7,.75,-2.7);
+    const generator=box(1.3,1.1,1.3,mats.orange); generator.position.set(2.5,.65,-2.6);
+    const bed=box(2.2,.45,1.0,new THREE.MeshLambertMaterial({color:0x5e79c9})); bed.position.set(-2.5,.45,2.1);
+    const flagPole=box(.1,4,.1,mats.metal); flagPole.position.set(0,2.2,-6.1);
+    const flagCloth=box(1.4,.7,.08,mats.claim); flagCloth.position.set(.75,3.3,-6.1);
+    const turrets = [];
+    for (const [tx,tz] of [[-3.3,-4.9],[3.3,-4.9]]) {
+      const t = new THREE.Group(); const baseT=box(.8,.45,.8,mats.turret); const gun=box(.35,.28,1.2,mats.black); gun.position.set(0,.2,-.65); t.add(baseT,gun); t.position.set(tx,3.85,tz); g.add(t); turrets.push({ mesh:t, ammo:90, cooldown:0 });
+    }
+    g.add(floor,wall1,wall2,wall3,doorWall,doorWall2,roof,door,vaultMesh,generator,bed,flagPole,flagCloth);
+    scene.add(g);
+    const base = { owner, group:g, position:g.position, radius:8, door, doorHp:120, destroyed:false, fuel: owner==='Você'?120:60, turrets, bed, generator, vaultMesh, storage: enemyStorage(owner), flag:{ position: new THREE.Vector3(pos.x, y, pos.z-6.1) } };
+    state.bases.push(base);
+    showMessage(owner==='Você' ? 'Base construída com cama, cofre, gerador, flag e 2 torretas.' : 'Base de jogador criada.');
+    return base;
+  }
+  function enemyStorage(owner) { return owner==='Você' ? { wood:8, food:2, water:2, ammoRifle:30 } : { ammoRifle:80, food:3, water:3, c4Charge:1, gasoline:2, maplestrike:1 }; }
+  buildBaseAt(new THREE.Vector3(66,0,-66), 'Rival BR');
+  buildBaseAt(new THREE.Vector3(-66,0,-58), 'California Squad');
+
+  function useBaseKit() {
+    if ((state.inventory.baseKit || 0) <= 0) return showMessage('Você não tem Kit Base. Pegue em Kits com vírgula.');
+    const target = state.player.clone().add(getForward().setY(0).normalize().multiplyScalar(9)); target.y=0;
+    if (buildBaseAt(target, 'Você')) { state.inventory.baseKit--; state.inventory.claimFlag = Math.max(0, (state.inventory.claimFlag||0)-1); playSound('pickup'); }
+  }
+
+  function nearestBasePart() {
+    let best=null, kind=null, d=Infinity;
+    for (const b of state.bases) {
+      const parts = [ ['bed', b.bed], ['generator', b.generator], ['vault', b.vaultMesh], ['door', b.door] ];
+      for (const [k,obj] of parts) {
+        const world = new THREE.Vector3(); obj.getWorldPosition(world);
+        const dd = world.distanceTo(state.player); if (dd < d) { d=dd; best=b; kind=k; }
+      }
+    }
+    return d < 4 ? { base:best, kind, dist:d } : null;
+  }
+
+  function interactBasePart(part) {
+    if (!part) return false;
+    const b=part.base;
+    if (part.kind === 'bed') { state.respawn = b.bed.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,2,0)); showMessage('Cama definida como seu respawn.'); return true; }
+    if (part.kind === 'generator') {
+      if ((state.inventory.gasoline || 0) > 0) { const use = Math.min(state.inventory.gasoline, 5); state.inventory.gasoline -= use; b.fuel += use * 22; showMessage(`Gerador abastecido: +${use} gasolina.`); }
+      else showMessage(`Gerador ${b.fuel>0?'ativo':'sem combustível'}. Compre gasolina no mecânico.`); return true;
+    }
+    if (part.kind === 'vault') { showMessage(b.owner==='Você' ? 'Cofre da base: se a porta cair, os itens podem dropar.' : 'Cofre inimigo protegido: exploda a porta com C4.'); return true; }
+    if (part.kind === 'door') { showMessage(`${b.owner}: porta HP ${Math.max(0,Math.round(b.doorHp))}.`); return true; }
+    return false;
+  }
+
+  function updateBases(dt) {
+    for (const b of state.bases) {
+      if (b.destroyed) continue;
+      b.fuel = Math.max(0, b.fuel - dt * 0.018);
+      for (const t of b.turrets) {
+        t.cooldown = Math.max(0, t.cooldown - dt);
+        if (b.fuel <= 0 || t.ammo <= 0 || t.cooldown > 0) continue;
+        const tw = t.mesh.getWorldPosition(new THREE.Vector3());
+        let target = null, dist = Infinity, isPlayer=false;
+        for (const z of zombies) { const d = z.group.position.distanceTo(tw); if (z.alive && d < 24 && d < dist) { target=z; dist=d; isPlayer=false; } }
+        for (const p of serverPlayers) {
+          if (b.owner === 'Você' && state.group.members.includes(p.name)) continue;
+          const d = p.position.distanceTo(tw); if (p.hp > 0 && d < 22 && d < dist && !isInSafeZone(p.position)) { target=p; dist=d; isPlayer=true; }
+        }
+        if (target) {
+          t.cooldown = 0.35; t.ammo--; playSound('viper');
+          createBulletTrail(isPlayer ? target.position.clone().add(new THREE.Vector3(0,2,0)) : target.group.position.clone().add(new THREE.Vector3(0,2.1,0)), 0x58d7ff);
+          if (isPlayer) damageServerPlayer(target, 14, 'torreta'); else damageZombie(target, 18, .25);
+        }
+      }
+    }
+  }
+
+  function placeC4OnDoor() {
+    if ((state.inventory.c4Charge||0) <= 0) return showMessage('Sem C4 de porta.');
+    const hit = nearestBasePart();
+    if (!hit || hit.kind !== 'door') return showMessage('Chegue perto de uma porta inimiga para colocar C4.');
+    if (hit.base.owner === 'Você') return showMessage('Não coloque C4 na sua própria porta.');
+    const c4 = makePickupMesh('c4Charge');
+    const wp = hit.base.door.getWorldPosition(new THREE.Vector3());
+    c4.position.copy(wp).add(new THREE.Vector3(0,.15,.35));
+    scene.add(c4);
+    const record = { mesh:c4, base:hit.base, armed:false };
+    state.activeC4.push(record);
+    state.inventory.c4Charge--;
+    showMessage('C4 colocada na porta. Equipe detonador, mire e botão direito para armar.');
+    return true;
+  }
+
+  function throwC4() {
+    if ((state.inventory.c4Throwable||0) <= 0) return showMessage('Sem C4 lançável.');
+    const start = state.player.clone().add(getForward().multiplyScalar(2));
+    const c4 = makePickupMesh('c4Throwable'); c4.position.copy(start); scene.add(c4);
+    const record = { mesh:c4, velocity:getForward().multiplyScalar(11).add(new THREE.Vector3(0,4,0)), fuse:2.8, throwable:true, armed:true, base:null };
+    state.activeC4.push(record); state.inventory.c4Throwable--; showMessage('C4 lançável arremessada!');
+  }
+
+  function armDetonator() {
+    if ((state.inventory.detonator||0) <= 0 || slots[state.selected].id !== 'detonator') return false;
+    let best=null, d=Infinity;
+    for (const c of state.activeC4) { const dd = c.mesh.position.distanceTo(state.player); if (dd < d && dd < 45) { d=dd; best=c; } }
+    if (!best) { showMessage('Nenhuma C4 no alcance do detonador.'); return true; }
+    best.armed = true; state.armedC4 = best; showMessage('C4 armada. Vá para longe e clique esquerdo para detonar.'); playSound('pickup'); return true;
+  }
+
+  function detonateC4() {
+    if ((state.inventory.detonator||0) <= 0) return showMessage('Você não tem detonador.');
+    const targets = state.activeC4.filter(c => c.armed);
+    if (!targets.length) return showMessage('Nenhuma C4 armada. Botão direito mirando nela para armar.');
+    targets.forEach(explodeC4);
+  }
+
+  function explodeC4(c) {
+    const pos = c.mesh.position.clone(); scene.remove(c.mesh);
+    const idx=state.activeC4.indexOf(c); if (idx>=0) state.activeC4.splice(idx,1);
+    playSound('explode'); createExplosion(pos);
+    if (c.base && !c.base.destroyed) raidBase(c.base, pos);
+    for (const z of [...zombies]) if (z.group.position.distanceTo(pos) < 7) damageZombie(z, 140, 2);
+    if (state.player.distanceTo(pos) < 9 && !state.safe) { state.health = Math.max(0,state.health-70); if (state.health<=0) endGame(); }
+  }
+  function createExplosion(pos) {
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(1.4,16,10), new THREE.MeshBasicMaterial({ color:0xff7b33, transparent:true, opacity:.65 }));
+    sphere.position.copy(pos); scene.add(sphere); bullets.push({ line:sphere, ttl:.45 });
+  }
+  function raidBase(b, pos) {
+    b.doorHp -= 140;
+    if (b.doorHp <= 0 && !b.destroyed) {
+      b.destroyed = true;
+      b.group.remove(b.door); scene.remove(b.door);
+      const vaultPos = b.vaultMesh.getWorldPosition(new THREE.Vector3());
+      Object.entries(b.storage || {}).forEach(([type,qty],i) => spawnPickup(type, qty, scatterV07(vaultPos, i)));
+      const bedPos = b.bed.getWorldPosition(new THREE.Vector3()); spawnPickup('wood', 4, bedPos);
+      b.turrets.forEach(t => { const p=t.mesh.getWorldPosition(new THREE.Vector3()); spawnPickup('turretAmmo', Math.max(10,t.ammo), p); });
+      showMessage('RAID! Porta destruída, cama quebrada e itens do cofre caíram no chão.');
+      addXP(25, 'raid');
+    }
+  }
+
+  function updateC4(dt) {
+    for (const c of [...state.activeC4]) {
+      if (c.throwable) {
+        c.velocity.y -= 12*dt; c.mesh.position.addScaledVector(c.velocity,dt);
+        const ground = terrainHeight(c.mesh.position.x,c.mesh.position.z)+.35;
+        if (c.mesh.position.y <= ground) { c.mesh.position.y=ground; c.velocity.multiplyScalar(.35); }
+        c.fuse -= dt; if (c.fuse <= 0) explodeC4(c);
+      }
+    }
+  }
+
+  // Airdrop: chama perto, cai em outro ponto e aparece no mapa.
+  function callAirdrop() {
+    if ((state.inventory.airdropLauncher||0) <= 0) return showMessage('Sem lançador de airdrop. Pegue o kit airdrop.');
+    state.inventory.airdropLauncher--;
+    const call = state.player.clone();
+    const a = Math.random()*Math.PI*2, r = 30 + Math.random()*38;
+    const drop = new THREE.Vector3(THREE.MathUtils.clamp(call.x + Math.cos(a)*r, -78, 78), 45, THREE.MathUtils.clamp(call.z + Math.sin(a)*r, -78, 78));
+    const crate = new THREE.Group();
+    const boxDrop=box(2.1,1.5,2.1,new THREE.MeshLambertMaterial({ color:0x516e42 }));
+    const chute=new THREE.Mesh(new THREE.ConeGeometry(3.6,1.2,18), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.72 })); chute.position.y=2.2; chute.rotation.x=Math.PI;
+    crate.add(boxDrop,chute); crate.position.copy(drop); scene.add(crate);
+    const ad = { callPoint: call.clone(), dropPoint: drop.clone(), mesh: crate, landed:false, ttl:120 };
+    state.airdrops.push(ad); playSound('serverLoad'); showMessage('Airdrop chamado! Abra M para ver a seta do chamado até a queda.');
+  }
+  function updateAirdrops(dt) {
+    for (const ad of [...state.airdrops]) {
+      if (!ad.landed) {
+        ad.mesh.position.y -= dt * 6;
+        const ground=terrainHeight(ad.mesh.position.x, ad.mesh.position.z)+1.0;
+        if (ad.mesh.position.y <= ground) { ad.mesh.position.y=ground; ad.landed=true; spawnAirdropLoot(ad.mesh.position.clone()); showMessage('Airdrop caiu! Loot raro no chão.'); playSound('pickup'); }
+      } else { ad.ttl -= dt; if (ad.ttl <= 0) { scene.remove(ad.mesh); state.airdrops.splice(state.airdrops.indexOf(ad),1); } }
+    }
+  }
+  function spawnAirdropLoot(pos) {
+    const loot = [ ['minigun',1], ['ammoMini',180], ['c4Throwable',2], ['c4Charge',2], ['detonator',1], ['ammoRifle',120], ['gasoline',3], ['turretAmmo',120] ];
+    loot.forEach(([type,qty],i)=>spawnPickup(type,qty,scatterV07(pos,i)));
+  }
+
+  // Jogadores simulados visíveis e PVP/grupo
+  serverPlayers.forEach((p, i) => {
+    p.hp = p.hp || 100; p.cooldown = 0; p.target = p.target || randomWaypoint();
+    p.inventory = p.inventory || { ammoRifle:60, food:2, water:2, viper:1, c4Charge: Math.random()<.25?1:0 };
+    p.mesh = friendlyMeshes[i];
+    if (p.mesh) {
+      p.mesh.userData.player = p;
+      const label = makeNameSprite(p.name); label.position.y = 3.95; p.mesh.add(label); p.label = label;
+    }
+  });
+  function makeNameSprite(text) {
+    const canvas = document.createElement('canvas'); canvas.width=256; canvas.height=64;
+    const ctx=canvas.getContext('2d'); ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(0,0,256,64); ctx.fillStyle='white'; ctx.font='bold 28px Arial'; ctx.textAlign='center'; ctx.fillText(text,128,40);
+    const tex=new THREE.CanvasTexture(canvas); const spr=new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true })); spr.scale.set(3.4,.85,1); return spr;
+  }
+  function randomWaypoint() { return new THREE.Vector3(THREE.MathUtils.randFloat(-74,74),0,THREE.MathUtils.randFloat(-74,74)); }
+  function updateServerPlayers(dt) {
+    for (const p of serverPlayers) {
+      if (p.hp <= 0) continue;
+      if (!p.mesh) continue;
+      p.cooldown = Math.max(0, p.cooldown-dt);
+      const inGroup = state.group.members.includes(p.name);
+      const dir = p.target.clone().sub(p.position); dir.y=0;
+      if (dir.length() < 2 || isInSafeZone(p.target)) p.target = randomWaypoint();
+      else { dir.normalize(); p.position.addScaledVector(dir, (inGroup?3.2:2.4)*dt); p.position.y=terrainHeight(p.position.x,p.position.z); p.mesh.position.copy(p.position); p.mesh.rotation.y=Math.atan2(dir.x,dir.z); }
+      const d = p.position.distanceTo(state.player);
+      if (!inGroup && !state.safe && !isInSafeZone(p.position) && d < 24 && p.cooldown <= 0 && !state.vehicle) {
+        p.cooldown = 1.4 + Math.random(); playSound('rifle'); createBulletTrail(state.player.clone(),0xff5555); state.health = Math.max(0,state.health-7); showMessage(`${p.name} fez PVP em você!`); if (state.health<=0) endGame();
+      }
+    }
+  }
+  function damageServerPlayer(p, amount, source='tiro') {
+    if (state.group.members.includes(p.name)) { showMessage('Fogo amigo desativado para membros do grupo.'); return; }
+    p.hp = Math.max(0, (p.hp||100)-amount); p.cooldown = .6;
+    if (p.mesh) { p.mesh.scale.setScalar(.92); setTimeout(()=>p.mesh && p.mesh.scale.setScalar(1),120); }
+    if (p.hp <= 0) killServerPlayer(p, source);
+  }
+  function killServerPlayer(p, source) {
+    if (p.mesh) { p.mesh.visible=false; }
+    Object.entries(p.inventory || {}).forEach(([type,qty],i)=>spawnPickup(type, qty, scatterV07(p.position, i)));
+    addXP(50, 'PVP');
+    showMessage(`${p.name} morreu em PVP e dropou a mochila.`);
+    setTimeout(()=>{ p.hp=100; p.position.copy(randomWaypoint()); p.position.y=terrainHeight(p.position.x,p.position.z); if(p.mesh){p.mesh.position.copy(p.position); p.mesh.visible=true;} }, 6500);
+  }
+
+  const oldShoot = shoot;
+  shoot = function() {
+    const def = currentWeaponDef();
+    if (!def) return showMessage('Equipe uma arma primeiro.');
+    if ((state.inventory[def.id] || 0) <= 0) return showMessage(`Você ainda não tem ${def.label}.`);
+    if ((state.inventory[def.ammo] || 0) <= 0) return showMessage('Sem munição para essa arma!');
+    state.inventory[def.ammo]--; state.attackAnim = 1; playSound(def.sound);
+    raycaster.setFromCamera(new THREE.Vector2(THREE.MathUtils.randFloatSpread(def.spread), THREE.MathUtils.randFloatSpread(def.spread)), camera);
+    let best = null, bestDist = Infinity, kind = 'zombie';
+    for (const z of zombies) {
+      if (!z.alive) continue; const dist=z.group.position.distanceTo(state.player); if (dist>def.range) continue;
+      const box3=new THREE.Box3().setFromObject(z.group); const hit=raycaster.ray.intersectBox(box3,new THREE.Vector3()); if(hit && dist<bestDist){best=z; bestDist=dist; kind='zombie';}
+    }
+    for (const p of serverPlayers) {
+      if ((p.hp||0)<=0 || isInSafeZone(p.position)) continue; const dist=p.position.distanceTo(state.player); if (dist>def.range) continue;
+      const box3=p.mesh ? new THREE.Box3().setFromObject(p.mesh) : new THREE.Box3().setFromCenterAndSize(p.position.clone().add(new THREE.Vector3(0,1.5,0)), new THREE.Vector3(1.4,3.2,1.4));
+      const hit=raycaster.ray.intersectBox(box3,new THREE.Vector3()); if(hit && dist<bestDist){best=p; bestDist=dist; kind='player';}
+    }
+    if (best) {
+      const targetPos = kind==='zombie' ? best.group.position.clone().add(new THREE.Vector3(0,2.3,0)) : best.position.clone().add(new THREE.Vector3(0,2.3,0));
+      createBulletTrail(targetPos, def.color);
+      if (kind==='zombie') damageZombie(best, def.damage, def.stun); else damageServerPlayer(best, def.damage, def.label);
+    } else createBulletTrail(null, def.color);
+  };
+
+  const oldCreateHeldModel = createHeldModel;
+  createHeldModel = function(id) {
+    const group = new THREE.Group();
+    const arm = box(0.28, 0.28, 0.95, mats.hand); arm.position.set(0.22,-0.05,0.27); arm.rotation.x=-0.25; group.add(arm);
+    if (weaponDefs[id]) {
+      const length = id==='minigun'?1.55:id==='sniper'?1.45:id==='maplestrike'||id==='caliRifle'?1.18:id==='shotgun'?1.25:id==='viper'||id==='pdw'?0.9:0.72;
+      const mainMat = id==='minigun'?mats.darkMetal:(id==='pistol'||id==='viper'||id==='pdw'?mats.pistol:mats.metal);
+      const body=box(.34,.28,length,mainMat); body.position.set(.33,.08,-.20-length*.08);
+      const barrel=box(.16,.14,length*.85,id==='sniper'||id==='minigun'?mats.black:mats.metal); barrel.position.set(.33,.16,-.48-length*.34);
+      const grip=box(.22,.50,.18,mats.pistol); grip.position.set(.33,-.22,.12); grip.rotation.x=-.3; group.add(body,barrel,grip);
+      if (id==='minigun') for(let i=0;i<4;i++){const b=box(.07,.07,.9,mats.black);b.position.set(.33+Math.cos(i*Math.PI/2)*.1,.16+Math.sin(i*Math.PI/2)*.1,-1.05);group.add(b);}
+      if (id==='sniper') { const scope=box(.20,.20,.55,mats.black); scope.position.set(.33,.35,-.35); group.add(scope); }
+    } else if (id==='airdropLauncher') {
+      const tube=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,1.35,12),mats.darkMetal); tube.rotation.x=Math.PI/2; tube.position.set(.35,.1,-.34); group.add(tube);
+      const sight=box(.16,.12,.28,mats.blueGlow); sight.position.set(.35,.32,-.45); group.add(sight);
+    } else if (id==='c4Charge' || id==='c4Throwable') {
+      const pack=box(.48,.32,.38,mats.c4); pack.position.set(.35,.08,-.22); const tape=box(.54,.07,.42,mats.red); tape.position.set(.35,.10,-.22); group.add(pack,tape);
+    } else if (id==='detonator') {
+      const d=box(.36,.52,.18,mats.darkMetal); d.position.set(.35,.06,-.22); const btn=box(.18,.08,.08,mats.red); btn.position.set(.35,.37,-.28); group.add(d,btn);
+    } else return oldCreateHeldModel(id);
+    return group;
+  };
+
+  const oldUseCurrentItem = useCurrentItem;
+  useCurrentItem = function() {
+    const slot = slots[state.selected];
+    if (slot.id === 'airdropLauncher') return callAirdrop();
+    if (slot.id === 'c4Charge') return placeC4OnDoor();
+    if (slot.id === 'detonator') return detonateC4();
+    return oldUseCurrentItem();
+  };
+
+  function useInventoryItem(type) {
+    if ((state.inventory[type]||0) <= 0) return;
+    if (type === 'food') return eatFood();
+    if (type === 'water') return drinkWater();
+    if (type === 'c4Throwable') return throwC4();
+    if (type === 'baseKit') return useBaseKit();
+    const idx = slots.findIndex(s => s.id === type);
+    if (idx >= 0) { state.selected = idx; updateHeldModel(); showMessage(`${labelOf(type)} equipado.`); }
+    else if (weaponDefs[type]) { slots[state.selected] = { id: type, label: labelOf(type), use: 'weapon' }; updateHeldModel(); showMessage(`${labelOf(type)} equipado no slot atual.`); }
+    else showMessage(`${labelOf(type)} está na mochila.`);
+  }
+
+  const oldGiveKit = giveKit;
+  giveKit = function(kind) {
+    const now = Date.now(); const cd = state.kitCooldowns[kind] || 0;
+    if (cd > now) { const left = Math.ceil((cd-now)/1000); return showMessage(`Aguarde ${left}s para pegar esse kit de novo.`); }
+    state.kitCooldowns[kind] = now + 5 * 60 * 1000; saveKitCooldowns();
+    if (kind === 'base') {
+      addItem('baseKit',1); addItem('wood',12); addItem('stone',6); addItem('claimFlag',1); addItem('gasoline',3); addItem('turretAmmo',120);
+      showMessage('Kit Base recebido. Aperte B para construir perto de você.');
+    } else if (kind === 'airdrop') {
+      addItem('airdropLauncher',1); showMessage('Kit Airdrop recebido. Equipe e use para chamar.');
+    } else if (kind === 'cali') {
+      addItem('pdw',1); addItem('caliRifle',1); addItem('shotgun',1); addItem('ammoRifle',120); addItem('ammoShotgun',24); showMessage('California Pack recebido.');
+    } else {
+      oldGiveKit(kind);
+    }
+    updateHeldModel(); updateKitButtons(); playSound('pickup');
+  };
+  function updateKitButtons() {
+    const now = Date.now();
+    document.querySelectorAll('[data-kit]').forEach(btn => {
+      const kind=btn.dataset.kit, cd=state.kitCooldowns[kind]||0;
+      if (cd>now) { btn.classList.add('cooldown'); const sec=Math.ceil((cd-now)/1000); const span=btn.querySelector('span'); if(span) span.textContent = `Cooldown ${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`; }
+      else btn.classList.remove('cooldown');
+    });
+  }
+  setInterval(updateKitButtons, 1000);
+  // Clona os botões para remover listeners antigos da v0.6 e evitar pegar kit duas vezes.
+  document.querySelectorAll('[data-kit]').forEach(btn => {
+    const clean = btn.cloneNode(true);
+    btn.replaceWith(clean);
+    clean.addEventListener('click', () => giveKit(clean.dataset.kit));
+  });
+
+  // Inventário em bloquinhos. Itens dropados no chão aumentam quantidade ao coletar.
+  const oldRenderInventory = renderInventory;
+  renderInventory = function() {
+    const mode = state.currentVaultMode;
+    document.getElementById('inventoryTitle').textContent = mode === 'safe' ? 'Vault da SAFE — persiste após morrer' : mode === 'small' ? 'Vault remoto menor — /vault' : 'Mochila em bloquinhos';
+    const inv = document.getElementById('inventoryList'); const vault = document.getElementById('vaultList'); inv.innerHTML=''; vault.innerHTML='';
+    inv.className = 'grid-inventory'; vault.className = 'grid-inventory';
+    Object.keys(state.inventory).sort().forEach(type => {
+      const qty = state.inventory[type] || 0; if (qty <= 0) return;
+      inv.appendChild(makeInvCard(type, qty, false, mode));
+    });
+    Object.keys(state.vault).sort().forEach(type => {
+      const qty = state.vault[type] || 0; if (qty <= 0) return;
+      vault.appendChild(makeInvCard(type, qty, true, mode));
+    });
+    document.getElementById('vaultHint').textContent = mode === 'safe' ? 'Vault completo na SAFE. Itens aqui não caem quando você morre.' : mode === 'small' ? 'Vault remoto menor pelo /vault. Itens aqui não caem quando você morre.' : 'A mochila usa bloquinhos por tamanho. Use, guarde ou drope itens no chão.';
+  };
+  function makeInvCard(type, qty, isVault, mode) {
+    const [w,h] = itemSizes[type] || [1,1];
+    const div=document.createElement('div'); div.className='inv-cell-card'; div.style.gridColumn=`span ${Math.min(w,8)}`; div.style.gridRow=`span ${Math.min(h,5)}`;
+    div.innerHTML = `<b>${labelOf(type)}</b><small>${qty}x · ${w}x${h}</small><div class="inv-actions"></div>`;
+    const actions=div.querySelector('.inv-actions');
+    if (!isVault) {
+      const use=document.createElement('button'); use.textContent='Usar'; use.addEventListener('click',()=>{useInventoryItem(type); renderInventory();}); actions.appendChild(use);
+      const drop=document.createElement('button'); drop.textContent='Dropar'; drop.addEventListener('click',()=>{dropItem(type,1); renderInventory();}); actions.appendChild(drop);
+      const store=document.createElement('button'); store.textContent='Guardar'; store.disabled = mode === 'backpack'; store.addEventListener('click',()=>moveToVault(type,1)); actions.appendChild(store);
+    } else {
+      const take=document.createElement('button'); take.textContent='Pegar'; take.addEventListener('click',()=>moveFromVault(type,1)); actions.appendChild(take);
+    }
+    return div;
+  }
+  function dropItem(type, qty=1) {
+    if ((state.inventory[type]||0) < qty) return;
+    state.inventory[type]-=qty; spawnPickup(type, qty, state.player.clone().add(getForward().multiplyScalar(2))); showMessage(`${labelOf(type)} dropado no chão.`);
+  }
+
+  const oldDrawServerMap = drawServerMap;
+  drawServerMap = function(players) {
+    oldDrawServerMap(players);
+    const canvas=document.getElementById('serverMapCanvas'), ctx=canvas.getContext('2d');
+    ctx.font='12px Arial';
+    for (const b of state.bases) {
+      const x=(b.position.x+90)/180*canvas.width, z=(b.position.z+90)/180*canvas.height;
+      ctx.fillStyle = b.owner==='Você' ? '#ffd86a' : '#ff6969'; ctx.fillRect(x-5,z-5,10,10); ctx.fillText(b.owner, x+8,z+4);
+      ctx.strokeStyle='#ffd86a'; ctx.beginPath(); ctx.arc(x,z,24/180*canvas.width,0,Math.PI*2); ctx.stroke();
+    }
+    for (const ad of state.airdrops) {
+      const cx=(ad.callPoint.x+90)/180*canvas.width, cz=(ad.callPoint.z+90)/180*canvas.height;
+      const dx=(ad.dropPoint.x+90)/180*canvas.width, dz=(ad.dropPoint.z+90)/180*canvas.height;
+      ctx.strokeStyle='#ffd86a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx,cz); ctx.lineTo(dx,dz); ctx.stroke();
+      drawArrowHead(ctx,cx,cz,dx,dz); ctx.fillStyle='#ffd86a'; ctx.fillText('CALL',cx+5,cz-5); ctx.fillText(ad.landed?'CAIU':'DROP',dx+5,dz-5);
+    }
+    const legend = document.querySelector('.map-legend') || document.createElement('div'); legend.className='map-legend'; legend.innerHTML = '<span class="airdrop-tag">Amarelo</span>: airdrop/chamada · Quadrado vermelho: base rival · Círculo: claim flag';
+    const mapGrid=document.querySelector('.map-grid > div:last-child'); if(mapGrid && !legend.parentNode) mapGrid.appendChild(legend);
+  };
+  function drawArrowHead(ctx,x1,y1,x2,y2){ const a=Math.atan2(y2-y1,x2-x1); ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-Math.cos(a-.5)*12,y2-Math.sin(a-.5)*12); ctx.lineTo(x2-Math.cos(a+.5)*12,y2-Math.sin(a+.5)*12); ctx.closePath(); ctx.fillStyle='#ffd86a'; ctx.fill(); }
+
+  const oldRenderMap = renderMap;
+  renderMap = function() {
+    const list = document.getElementById('playerList'); list.innerHTML='';
+    const players = [{ name: state.survivor.name, role:'Você', position:state.player, online:true, hp:Math.round(state.health) }, ...serverPlayers];
+    players.forEach((p)=>{
+      const row=document.createElement('div'); const inGroup=state.group.members.includes(p.name);
+      row.className = `player-card ${p.name!==state.survivor.name ? (inGroup?'groupmate':'hostile') : ''}`;
+      row.innerHTML = `<div><b>${p.name}</b><span>${p.role} · ${p.online?'online':'offline'} · HP:${p.hp ?? 100} · X:${Math.round(p.position.x)} Z:${Math.round(p.position.z)}</span></div>`;
+      if (p.name !== state.survivor.name) { const btn=document.createElement('button'); btn.textContent=inGroup?'No grupo':'Convidar'; btn.disabled=inGroup; btn.addEventListener('click',()=>inviteToGroup(p.name)); row.appendChild(btn); }
+      list.appendChild(row);
+    });
+    document.getElementById('groupNameDisplay').textContent = state.group.name || 'Sem grupo';
+    document.getElementById('groupMembers').textContent = state.group.members.join(', ');
+    drawServerMap(players);
+  };
+
+  const oldHandleCommand = handleCommand;
+  handleCommand = function(text) {
+    if (text.trim().toLowerCase() === '/kit base') { addChatLine(state.survivor.name, text); giveKit('base'); return; }
+    oldHandleCommand(text);
+  };
+
+  const oldCloseAllOverlays = closeAllOverlays;
+  closeAllOverlays = function() {
+    state.npcOpen = false;
+    const npc=document.getElementById('npcPanel'); if(npc) npc.classList.remove('open');
+    oldCloseAllOverlays();
+  };
+  document.querySelectorAll('.closeOverlay').forEach(btn => btn.addEventListener('click', closeAllOverlays));
+
+  const oldUpdateSpawns = updateSpawns;
+  updateSpawns = function(dt) {
+    state.zombieSpawnTimer -= dt;
+    if (state.zombieSpawnTimer <= 0 && zombies.length < 24) { spawnZombie(false); state.zombieSpawnTimer = 4 + Math.random()*4; }
+    updateServerPlayers(dt);
+    updateBases(dt);
+    updateAirdrops(dt);
+    updateC4(dt);
+  };
+
+  const oldUpdateHUD = updateHUD;
+  updateHUD = function(dt) {
+    oldUpdateHUD(dt);
+    const xp = document.getElementById('xpLine'); if (xp) xp.textContent = `XP: ${Math.floor(state.xp)}`;
+    const veh = document.getElementById('vehicleLine'); if (veh) { veh.style.display = state.vehicle ? 'block' : 'none'; if(state.vehicle) veh.textContent = `${state.vehicle.name} · gasolina ${Math.round(state.vehicle.fuel)}%`; }
+    const raid = document.getElementById('raidLine'); if (raid) {
+      const own = state.bases.find(b=>b.owner==='Você'); const active = state.airdrops.find(a=>!a.landed); const c4 = state.activeC4.filter(c=>c.armed).length;
+      raid.textContent = `${own ? `Base fuel ${Math.round(own.fuel)} · porta ${Math.max(0,Math.round(own.doorHp))}` : 'Base: sem base'} · Airdrop: ${active ? 'caindo' : 'nenhum'} · C4 armada: ${c4}`;
+    }
+  };
+
+  endGame = function() {
+    const death = state.player.clone();
+    Object.entries({...state.inventory}).forEach(([type,qty],i)=>{ if(qty>0) spawnPickup(type,qty,scatterV07(death,i)); state.inventory[type]=0; });
+    Object.assign(state.inventory,{ pistol:1, ammo:24, axe:1, food:1, water:1 });
+    state.health=100; state.hunger=85; state.thirst=85; state.energy=100; state.velocityY=0; state.vehicle=null;
+    const spawn = state.respawn ? state.respawn.clone() : new THREE.Vector3(safeZone.x, terrainHeight(safeZone.x,safeZone.z)+2, safeZone.z+3);
+    state.player.copy(spawn); state.gameOver=false; playSound('hurt'); showMessage('Você morreu: mochila caiu no chão. Vault permaneceu salvo.', 4.2);
+  };
+
+  window.addEventListener('keydown', (e)=>{
+    const code=e.code || e.key;
+    if (state.chatOpen || state.mapOpen || state.kitsOpen || state.inventoryOpen || state.npcOpen) {
+      if (code === 'Escape') closeAllOverlays();
+      return;
+    }
+    if (code === 'Digit0') { state.selected=9; updateHeldModel(); e.preventDefault(); }
+    if (code === 'KeyB') { useBaseKit(); e.preventDefault(); }
+    if (code === 'KeyX') { enterExitVehicle(true); e.preventDefault(); }
+    if (code === 'KeyE') {
+      const now=performance.now(); if(now-state.lastInteractAt<250) return; state.lastInteractAt=now;
+      const npc=nearestNpc(); if(npc) { openNpc(npc); e.preventDefault(); return; }
+      const part=nearestBasePart(); if(interactBasePart(part)) { e.preventDefault(); return; }
+      if (enterExitVehicle(false)) { e.preventDefault(); return; }
+    }
+  }, { passive:false });
+
+  window.addEventListener('mousedown', (e)=>{
+    if (!state.started || state.gameOver || state.chatOpen || state.mapOpen || state.kitsOpen || state.inventoryOpen || state.npcOpen) return;
+    if (e.button === 2) { e.preventDefault(); armDetonator(); }
+  }, { passive:false });
+  window.addEventListener('contextmenu', e=>e.preventDefault());
+
+  const oldPlaySound = playSound;
+  playSound = function(name) {
+    if (name === 'minigun') { beep(820,0.035,'square',0.07,-120); return; }
+    if (name === 'shotgun') { beep(240,0.16,'sawtooth',0.13,-150); beep(80,0.08,'square',0.08,-20); return; }
+    if (name === 'explode') { beep(70,0.24,'sawtooth',0.18,-20); setTimeout(()=>beep(45,0.28,'square',0.12,-5),80); return; }
+    oldPlaySound(name);
+  };
+
+  updateHeldModel(); updateKitButtons();
+  showMessage('v0.8 carregada: fome e sede agora descem bem mais devagar para dar tempo de PVP.');
+})();

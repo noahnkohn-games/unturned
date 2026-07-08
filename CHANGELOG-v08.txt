@@ -1,0 +1,6 @@
+Blockland Survival v0.8
+
+- Reduzida drasticamente a velocidade de queda de comida e água.
+- Fome: 0.55/s -> 0.07/s.
+- Sede: 0.75/s -> 0.09/s.
+- Cache bust atualizado para game.js?v=0.8-pvp-balance-food-water.

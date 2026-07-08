@@ -1,0 +1,19 @@
+Blockland Survival v0.7 - Bases + Airdrop + Raid
+
+- Jogadores simulados aparecem no mundo e se movimentam.
+- PVP local: fora do grupo pode matar; no grupo tem friendly fire desligado.
+- Zumbis restritos perto das casas e dropando todas as armas/itens.
+- Kit Base com paredes, porta, teto, cofre, gerador, cama, bandeira claim e 2 torretas.
+- Cama vira respawn com F.
+- Gerador usa gasolina; torretas desligam sem combustível.
+- Safe com NPCs: trader, mecânico e armeiro trocam XP por itens.
+- XP por PVE/PVP.
+- Carros dirigíveis com gasolina.
+- Kit airdrop com lançador e marcador/seta no mapa.
+- Airdrop solta minigun, munição, C4, detonador, gasolina e itens raros.
+- C4 de porta + detonador: botão direito arma e esquerdo detona.
+- Inventário em bloquinhos por tamanho, com usar/dropar/guardar.
+- Morrer dropa mochila inteira no chão; vault continua salvo.
+- Cooldown de 5 minutos por kit.
+
+Observação: multiplayer ainda é simulado/local, compatível com GitHub Pages.

@@ -1,6 +1,3 @@
-Blockland Survival v1.1 SUPERLEVE
-
-Versao de pouco espaco: so index.html e .nojekyll.
-Nao tem server, node_modules, imagens, sons ou bibliotecas locais.
-Suba estes arquivos na raiz do GitHub Pages.
-Para multiplayer real, configure a URL WSS na tela Configuracoes.
+Blockland Survival v1.2 LEVE
+Abra index.html ou publique no GitHub Pages.
+Pacote sem assets pesados, sem server e sem node_modules.

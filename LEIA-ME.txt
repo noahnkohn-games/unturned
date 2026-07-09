@@ -1,3 +1,7 @@
-Blockland Survival v1.2 LEVE
-Abra index.html ou publique no GitHub Pages.
-Pacote sem assets pesados, sem server e sem node_modules.
+Blockland Survival v1.2.1 Mouse Fix
+
+Correções:
+- Mouse agora gira a câmera mesmo se o pointer lock falhar.
+- W e seta para cima andam para frente.
+- S e seta para baixo andam para trás.
+- Direção de tiro, interação, construção e terceira pessoa corrigidas junto com a câmera.

@@ -1,123 +1,24 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Blockland Survival v1.1</title>
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div id="game"></div>
-  <div id="crosshair">+</div>
-
-  <div id="hud">
-    <div id="version">v1.1 ONLINE READY</div>
-    <div id="safeText" class="safe-off">WILD</div>
-    <div class="bars">
-      <div class="bar"><span>VIDA</span><div><i id="healthBar"></i></div><b id="healthText">100</b></div>
-      <div class="bar"><span>FOME</span><div><i id="hungerBar"></i></div><b id="hungerText">100</b></div>
-      <div class="bar"><span>SEDE</span><div><i id="thirstBar"></i></div><b id="thirstText">100</b></div>
-      <div class="bar"><span>ENERGIA</span><div><i id="energyBar"></i></div><b id="energyText">100</b></div>
-    </div>
-    <div id="infoLine">Item: <b id="equippedText">Pistolinha</b> | Munição: <b id="ammoText">48</b> | Zumbis: <b id="zombieText">0</b></div>
-    <div id="hotbar"></div>
-    <div id="message"></div>
-  </div>
-
-  <div id="startScreen">
-    <div class="menu-shell">
-      <div class="brand">
-        <h1>Blockland Survival</h1>
-        <h2>v1.1 ONLINE READY</h2>
-      </div>
-      <div class="menu-tabs">
-        <button class="menu-tab active" data-target="survivorsMenu">Survivors</button>
-        <button class="menu-tab" data-target="settingsMenu">Configurações</button>
-        <button class="menu-tab" data-target="serversMenu">Servidores</button>
-      </div>
-
-      <div id="survivorsMenu" class="menu-section active">
-        <p>Customize seu boneco antes de carregar o servidor.</p>
-        <label>Nome do survivor
-          <input id="survivorName" maxlength="18" value="Survivor" />
-        </label>
-        <div class="color-row">
-          <label>Camisa <input id="shirtColor" type="color" value="#315c9a" /></label>
-          <label>Pele <input id="skinColor" type="color" value="#f1b47d" /></label>
-        </div>
-        <button id="saveSurvivor">Salvar Survivor</button>
-      </div>
-
-      <div id="settingsMenu" class="menu-section">
-        <p>Configurações locais do protótipo.</p>
-        <label>Volume dos sons procedurais
-          <input id="volumeSlider" type="range" min="0" max="1" step="0.05" value="0.45" />
-        </label>
-        <p class="note">Sons: tiro, zumbi, passos, hit, coleta e carregamento do servidor. São placeholders originais, não assets oficiais.</p>
-      </div>
-
-      <div id="serversMenu" class="menu-section">
-        <p class="server-card"><b>BR-01 Blockland Survival</b><br/>Mapa: Campo + Cidade + SAFE<br/>Status: servidor único / jogadores reais</p>
-        <p class="note">Sem bots: a lista mostra só jogadores reais conectados ao servidor multiplayer configurado.</p>
-      </div>
-
-      <button id="startButton">ENTRAR NO BR-01</button>
-      <div id="menuNotice"></div>
-      <div class="controls">
-        <b>Controles</b><br/>
-        WASD/Setas: andar · Mouse: olhar · Espaço: pular · Shift: correr<br/>
-        1-9: itens · Clique/F: usar · E: coletar<br/>
-        J: chat · M: mapa/perfis/grupo · ,: kits · TAB: inventário/vault · B: usar kit base · X: sair do carro · ESC: fechar telas<br/>
-        Comandos: /warp safe · /vault · /tpa Nome · /kit base
-      </div>
-    </div>
-  </div>
-
-  <div id="chatPanel" class="overlay small-overlay">
-    <div class="overlay-head"><b>Chat do Servidor</b><button class="closeOverlay">ESC</button></div>
-    <div id="chatLog"><div class="system"><b>Sistema:</b> Aperte J para abrir/fechar. Comandos: /warp safe, /vault, /tpa Nome</div></div>
-    <div class="chat-row"><input id="chatInput" placeholder="Digite mensagem ou comando..." /><button id="chatSend">Enviar</button></div>
-  </div>
-
-  <div id="mapPanel" class="overlay wide-overlay">
-    <div class="overlay-head"><b>Mapa do Servidor — BR-01 Blockland Survival</b><button class="closeOverlay">ESC</button></div>
-    <div class="map-grid">
-      <canvas id="serverMapCanvas" width="420" height="420"></canvas>
-      <div>
-        <h3>Jogadores online</h3>
-        <div id="playerList"></div>
-        <h3>Grupo</h3>
-        <div class="group-box">
-          <input id="groupNameInput" placeholder="Nome do grupo" />
-          <button id="createGroupBtn">Criar grupo</button>
-          <p>Grupo: <b id="groupNameDisplay">Sem grupo</b></p>
-          <p>Membros: <span id="groupMembers">Você</span></p>
-          <p class="note">No grupo, /tpa para integrantes não precisa /tpa accept.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="kitsPanel" class="overlay kits-overlay">
-    <div class="overlay-head"><b>Kits de Armas</b><button class="closeOverlay">ESC</button></div>
-    <div class="kit-grid">
-      <button data-kit="starter"><b>Starter</b><span>Pistolinha + munição + comida/água</span></button>
-      <button data-kit="viper"><b>Viper</b><span>SMG leve + munição rifle</span></button>
-      <button data-kit="maple"><b>MapleStrike</b><span>Rifle forte + munição</span></button>
-      <button data-kit="sniper"><b>Sniper</b><span>Longo alcance + munição rara</span></button>
-    </div>
-  </div>
-
-  <div id="inventoryPanel" class="overlay inventory-overlay">
-    <div class="overlay-head"><b id="inventoryTitle">Inventário</b><button class="closeOverlay">ESC</button></div>
-    <p id="vaultHint" class="note"></p>
-    <div class="inventory-grid">
-      <div><h3>Mochila</h3><div id="inventoryList"></div></div>
-      <div><h3>Vault seguro</h3><div id="vaultList"></div></div>
-    </div>
-  </div>
-
-  <script src="config.js?v=1.1-online-ready"></script>
-  <script type="module" src="game.js?v=1.1-online-ready-no-fake-players-20260708"></script>
-</body>
-</html>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Blockland Survival v1.1 Superleve</title><style>
+*{box-sizing:border-box}body{margin:0;overflow:hidden;background:#111;color:#fff;font-family:Arial,sans-serif}button,input{font:inherit}#game{position:fixed;inset:0}#cross{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font:28px monospace;text-shadow:0 2px 8px #000;display:none}#hud{position:fixed;left:12px;bottom:12px;display:none;gap:8px;flex-direction:column;z-index:4}.bar{width:210px;height:16px;background:#0008;border:1px solid #fff3;border-radius:8px;overflow:hidden}.bar i{display:block;height:100%;background:#54e06d}.b2 i{background:#f0c64d}.b3 i{background:#4dc7f0}.row{padding:7px 9px;background:#0008;border:1px solid #fff2;border-radius:8px;font-weight:700}.hot{display:flex;gap:5px}.slot{width:54px;height:48px;background:#0009;border:1px solid #fff3;border-radius:8px;display:grid;place-items:center;position:relative}.slot.on{outline:2px solid #ffd44d}.slot small{position:absolute;right:4px;bottom:2px;font-size:10px}.safe{color:#72ffae}.wild{color:#ff7777}#msg{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#0009;border:1px solid #fff2;border-radius:10px;padding:9px 14px;opacity:0;transition:.2s;z-index:8}#msg.show{opacity:1}#menu{position:fixed;inset:0;background:linear-gradient(120deg,#17232d,#1c3323);z-index:10}.menuBox{position:absolute;left:22px;top:20px;width:330px;background:#0008;border:1px solid #fff2;border-radius:16px;padding:18px}.menuBox h1{margin:0;font-size:28px}.menuBox h2{margin:5px 0 18px;color:#9dffd4;font-size:14px}.tabs{display:flex;flex-direction:column;gap:8px}.tabs button,#start,.kit button{border:0;border-radius:10px;padding:11px;background:#fff2;color:#fff;font-weight:800;text-align:left;cursor:pointer}.tabs button.active,#start{background:#ffd44d;color:#1b1b1b}.sec{display:none;margin-top:14px}.sec.active{display:block}.sec label{display:block;margin:10px 0}.sec input{width:100%;padding:8px;border-radius:8px;border:0}.avatar{position:absolute;left:55%;top:50%;transform:translate(-50%,-50%);width:170px;height:310px}.head,.body,.leg,.arm{position:absolute;border:3px solid #0005;border-radius:10px}.head{left:52px;top:14px;width:66px;height:66px;background:var(--skin,#f1b47d)}.eye{position:absolute;top:39px;width:10px;height:10px;background:#111;border-radius:50%}.eye.l{left:72px}.eye.r{left:95px}.mouth{position:absolute;left:72px;top:62px;width:30px;height:5px;background:#111;border-radius:9px}.body{left:43px;top:88px;width:84px;height:106px;background:var(--shirt,#315c9a)}.arm{top:96px;width:24px;height:112px;background:var(--skin,#f1b47d)}.arm.l{left:16px}.arm.r{right:16px}.leg{top:195px;width:35px;height:95px;background:#405066}.leg.l{left:45px}.leg.r{right:45px}.foot{position:absolute;top:284px;width:40px;height:15px;background:#141820;border-radius:8px}.foot.l{left:41px}.foot.r{right:41px}#load{position:fixed;inset:0;background:#000d;display:none;z-index:12;place-items:center;font-size:22px;font-weight:900}.overlay{position:fixed;display:none;z-index:9;background:#111d;border:1px solid #fff2;border-radius:16px;padding:14px}.overlay.open{display:block}.top{left:50%;top:50%;transform:translate(-50%,-50%);width:min(900px,94vw);max-height:86vh;overflow:auto}.small{left:12px;bottom:96px;width:360px}.grid{display:grid;grid-template-columns:repeat(8,44px);gap:5px;background:#0005;padding:10px;border-radius:12px}.it{width:44px;height:44px;background:#fff1;border:1px solid #fff3;border-radius:7px;display:grid;place-items:center;font-size:22px;position:relative;cursor:grab}.it b{display:none;position:absolute;left:0;top:-28px;background:#000;padding:5px;border-radius:6px;font-size:11px;white-space:nowrap}.it:hover b{display:block}.it small{position:absolute;right:3px;bottom:1px;font-size:10px}.mapCan{background:#244b2a;border-radius:12px}.players{display:grid;gap:8px}.card{padding:9px;border:1px solid #fff2;background:#fff1;border-radius:10px}.chatlog{height:210px;overflow:auto;background:#0007;border-radius:8px;padding:8px}.chatrow{display:flex;gap:6px;margin-top:8px}.chatrow input{flex:1;padding:9px;border-radius:8px;border:0}.note{font-size:12px;color:#ddd;line-height:1.35}
+</style></head><body><div id="game"></div><div id="cross">+</div><div id="hud"><div class="row">v1.1 SUPERLEVE · <span id="zone" class="wild">WILD</span> · Online: <b id="online">1</b></div><div class="bar"><i id="hp" style="width:100%"></i></div><div class="bar b2"><i id="food" style="width:100%"></i></div><div class="bar b3"><i id="water" style="width:100%"></i></div><div class="row">Item: <b id="eq">Pistolinha</b> · Ammo: <b id="ammo">36</b> · Zumbis: <b id="zc">0</b></div><div id="hot" class="hot"></div></div><div id="msg"></div><div id="load">Carregando BR-01...</div>
+<div id="menu"><div class="menuBox"><h1>Blockland Survival</h1><h2>v1.1 SUPERLEVE</h2><div class="tabs"><button class="active" data-t="surv">Survivors</button><button data-t="set">Configurações</button><button data-t="serv">Servidores</button></div><div id="surv" class="sec active"><label>Nome<input id="name" maxlength="18" value="Survivor"></label><label>Camisa<input id="shirt" type="color" value="#315c9a"></label><label>Pele<input id="skin" type="color" value="#f1b47d"></label></div><div id="set" class="sec"><label>WebSocket online real<input id="ws" placeholder="wss://seu-backend"></label><p class="note">Este ZIP não tem server/node_modules. Cole uma URL WSS já hospedada para ver jogadores reais.</p></div><div id="serv" class="sec"><div class="card"><b>BR-01 Blockland Survival</b><br>Servidor único · sem players falsos<br><span class="note">Só aparecem jogadores reais conectados.</span></div></div><button id="start">ENTRAR NO BR-01</button><p class="note">WASD/Setas andar · mouse olhar · clique atira · E/F coleta · TAB inventário · J chat · M mapa · , kits · /warp safe</p></div><div class="avatar" id="av"><div class="head"></div><div class="eye l"></div><div class="eye r"></div><div class="mouth"></div><div class="body"></div><div class="arm l"></div><div class="arm r"></div><div class="leg l"></div><div class="leg r"></div><div class="foot l"></div><div class="foot r"></div></div></div>
+<div id="inv" class="overlay top"><h2>Inventário</h2><p class="note">Ícones no grid. Passe o mouse para ver o nome; duplo clique usa/equipa.</p><div id="invGrid" class="grid"></div></div><div id="map" class="overlay top"><h2>Mapa BR-01</h2><canvas id="mapCan" class="mapCan" width="420" height="420"></canvas><h3>Jogadores online reais</h3><div id="plist" class="players"></div></div><div id="chat" class="overlay small"><b>Chat</b><div id="chatlog" class="chatlog"></div><div class="chatrow"><input id="chatin"><button id="send">Enviar</button></div></div><div id="kits" class="overlay top"><h2>Kits</h2><div class="kit"><button data-k="starter">Starter</button> <button data-k="rifle">Rifle</button> <button data-k="sniper">Sniper</button></div><p class="note">Cooldown simples de 5 minutos.</p></div>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+const $=id=>document.getElementById(id), scene=new THREE.Scene();scene.background=new THREE.Color(0x87c9ff);const cam=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.1,350),ren=new THREE.WebGLRenderer({antialias:false});ren.setPixelRatio(1);ren.setSize(innerWidth,innerHeight);$('game').appendChild(ren.domElement);scene.add(new THREE.HemisphereLight(0xdff6ff,0x284b28,1.2));let sun=new THREE.DirectionalLight(0xffffff,1);sun.position.set(30,40,20);scene.add(sun);
+const mat=c=>new THREE.MeshLambertMaterial({color:c}), box=(x,y,z,c)=>new THREE.Mesh(new THREE.BoxGeometry(x,y,z),mat(c)), state={started:false,name:'Survivor',shirt:'#315c9a',skin:'#f1b47d',pos:new THREE.Vector3(-55,2,55),velY:0,yaw:0,pitch:0,hp:100,food:100,water:100,sel:0,keys:new Set(),safe:true,lastShot:0,lastKit:0,ws:null,net:new Map(),id:localStorage.bid||('p'+Math.random().toString(36).slice(2))};localStorage.bid=state.id;
+const inv={pistol:1,ammo:36,food:2,water:2,axe:1,viper:0,maplestrike:0,sniper:0,ammoRifle:0,ammoSniper:0}, labels={pistol:'Pistolinha',ammo:'Munição',food:'Comida',water:'Água',axe:'Machado',viper:'Viper',maplestrike:'MapleStrike',sniper:'Sniper',ammoRifle:'Munição rifle',ammoSniper:'Munição sniper'}, icon={pistol:'🔫',ammo:'•',food:'🥫',water:'💧',axe:'🪓',viper:'🔫',maplestrike:'🔫',sniper:'🎯',ammoRifle:'•',ammoSniper:'•'}, slots=['pistol','viper','maplestrike','sniper','axe','food','water'];
+const ground=box(180,.2,180,0x4fad49);ground.position.y=-.1;scene.add(ground);const safe={x:-60,z:58,r:18};let ring=new THREE.Mesh(new THREE.CylinderGeometry(safe.r,safe.r,.08,40),new THREE.MeshBasicMaterial({color:0x42f5a7,transparent:true,opacity:.25}));ring.position.set(safe.x,.04,safe.z);scene.add(ring);const houses=[],zombies=[],drops=[],remoteMeshes=new Map();
+function addHouse(x,z){let g=new THREE.Group();let base=box(8,4,7,0x8b5a35);base.position.y=2;let roof=box(9,1,8,0x5b3820);roof.position.y=4.6;g.add(base,roof);g.position.set(x,0,z);scene.add(g);houses.push({x,z});}[[18,10],[34,-18],[-10,-28],[48,34],[-35,-10]].forEach(p=>addHouse(...p));for(let i=0;i<30;i++){let t=box(.8,5,.8,0x754a25),l=box(3,3,3,0x2f7f31);t.position.set((Math.random()-.5)*150,2.5,(Math.random()-.5)*150);l.position.copy(t.position);l.position.y=6;scene.add(t,l)}
+function spawnZ(){let h=houses[Math.random()*houses.length|0],z={mesh:new THREE.Group(),hp:80,stun:0};let b=box(1,1.8,.7,0x58704b),head=box(.9,.9,.9,0x8bb16b),e1=box(.14,.14,.04,0x39ff46),e2=box(.14,.14,.04,0x39ff46),m=box(.45,.08,.05,0x111111);b.position.y=1.2;head.position.y=2.45;e1.position.set(-.18,2.5,-.46);e2.position.set(.18,2.5,-.46);m.position.set(0,2.25,-.47);z.mesh.add(b,head,e1,e2,m);z.mesh.position.set(h.x+(Math.random()-.5)*16,0,h.z+(Math.random()-.5)*16);scene.add(z.mesh);zombies.push(z)}for(let i=0;i<7;i++)spawnZ();
+function inSafe(v=state.pos){return Math.hypot(v.x-safe.x,v.z-safe.z)<safe.r}function msg(t){let m=$('msg');m.textContent=t;m.className='show';clearTimeout(msg.t);msg.t=setTimeout(()=>m.className='',1700)}function addChat(a,t){$('chatlog').innerHTML+=`<div><b>${a}:</b> ${t}</div>`;$('chatlog').scrollTop=99999}
+function connect(){let url=$('ws').value.trim();localStorage.ws=url;if(!url){addChat('Sistema','Sem backend: nenhum player falso será criado.');return}try{state.ws=new WebSocket(url);state.ws.onopen=()=>{msg('Online real conectado');send({type:'join',player:payload()})};state.ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}netMsg(d)};state.ws.onclose=()=>{state.net.clear();remoteMeshes.forEach(m=>scene.remove(m));remoteMeshes.clear()}}catch{msg('URL inválida')}}function send(o){if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify(o))}function payload(){return{id:state.id,name:state.name,shirt:state.shirt,skin:state.skin,hp:Math.round(state.hp),position:{x:state.pos.x,y:0,z:state.pos.z},yaw:state.yaw}}function netMsg(d){if((d.type==='state'||d.type==='join')&&d.player&&d.player.id!==state.id){let p=d.player;p.t=performance.now();state.net.set(p.id,p);makeRemote(p)}if(d.type==='snapshot'&&Array.isArray(d.players))d.players.forEach(p=>{if(p.id!==state.id){p.t=performance.now();state.net.set(p.id,p);makeRemote(p)}});if(d.type==='leave'){let m=remoteMeshes.get(d.id);if(m)scene.remove(m);remoteMeshes.delete(d.id);state.net.delete(d.id)}if(d.type==='chat')addChat(d.author||'Jogador',d.message||'')}
+function makeRemote(p){let m=remoteMeshes.get(p.id);if(!m){m=new THREE.Group();m.add(box(1,1.7,.6,parseInt((p.shirt||'#315c9a').slice(1),16)),box(.8,.8,.8,parseInt((p.skin||'#f1b47d').slice(1),16)));m.children[0].position.y=1;m.children[1].position.y=2.25;scene.add(m);remoteMeshes.set(p.id,m)}m.position.set(p.position.x,0,p.position.z);m.rotation.y=p.yaw||0}
+function shoot(){let now=performance.now();if(now-state.lastShot<260)return;state.lastShot=now;let w=slots[state.sel],ammo=w==='sniper'?'ammoSniper':w==='pistol'?'ammo':'ammoRifle';if(!['pistol','viper','maplestrike','sniper'].includes(w)||!inv[w])return msg('Equipe uma arma');if((inv[ammo]||0)<=0)return msg('Sem munição');inv[ammo]--;let dir=new THREE.Vector3(Math.sin(state.yaw),0,Math.cos(state.yaw)).normalize(),best=null,bd=55;if(w==='sniper')bd=115;if(w==='viper')bd=45;for(let z of zombies){let to=z.mesh.position.clone().sub(state.pos),d=to.length();if(d<bd&&to.normalize().dot(dir)>.96){best=z;bd=d}}if(best){best.hp-=w==='sniper'?120:w==='maplestrike'?45:w==='viper'?28:40;best.stun=.8;if(best.hp<=0){drop(best.mesh.position);scene.remove(best.mesh);zombies.splice(zombies.indexOf(best),1);msg('Zumbi dropou loot')}}renderInv();}
+function drop(pos){['ammo','food','water','viper','maplestrike','sniper','ammoRifle','ammoSniper'].forEach(t=>{if(Math.random()<.38){let m=box(.6,.25,.6,0xffd44d);m.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*2,.25,(Math.random()-.5)*2));scene.add(m);drops.push({t,qty:t.includes('ammo')?10:1,m})}})}function collect(){for(let i=drops.length-1;i>=0;i--){let d=drops[i];if(d.m.position.distanceTo(state.pos)<3){inv[d.t]=(inv[d.t]||0)+d.qty;scene.remove(d.m);drops.splice(i,1);msg('Coletou '+labels[d.t]);}}renderInv()}
+function renderInv(){let g=$('invGrid');g.innerHTML='';Object.keys(inv).forEach(k=>{if(inv[k]<=0)return;let d=document.createElement('div');d.className='it';d.innerHTML=`${icon[k]||'⬛'}<b>${labels[k]}</b><small>${inv[k]}</small>`;d.ondblclick=()=>{let i=slots.indexOf(k);if(i>=0){state.sel=i;msg(labels[k]+' equipado')}else if(k==='food'){inv.food--;state.food=Math.min(100,state.food+30)}else if(k==='water'){inv.water--;state.water=Math.min(100,state.water+35)}renderInv()};g.appendChild(d)});$('hot').innerHTML=slots.map((s,i)=>`<div class="slot ${i===state.sel?'on':''}">${icon[s]||'□'}<small>${i+1}</small></div>`).join('');$('eq').textContent=labels[slots[state.sel]]||'Mãos';$('ammo').textContent=inv.ammo+'/'+inv.ammoRifle+'/'+inv.ammoSniper}
+function mapDraw(){let c=$('mapCan'),x=c.getContext('2d');x.clearRect(0,0,420,420);x.fillStyle='#244b2a';x.fillRect(0,0,420,420);x.strokeStyle='#42f5a7';x.beginPath();x.arc((safe.x+90)/180*420,(safe.z+90)/180*420,safe.r/180*420,0,7);x.stroke();let draw=(p,n,col)=>{x.fillStyle=col;x.beginPath();x.arc((p.x+90)/180*420,(p.z+90)/180*420,5,0,7);x.fill();x.fillText(n,(p.x+90)/180*420+7,(p.z+90)/180*420+4)};draw(state.pos,state.name,'#ffd44d');state.net.forEach(p=>draw(p.position,p.name,'#9dffd4'));$('plist').innerHTML=`<div class=card><b>${state.name}</b><br>Você · online</div>`+[...state.net.values()].map(p=>`<div class=card><b>${p.name}</b><br>Jogador real · online</div>`).join('')+(state.net.size?'':'<div class=card>Nenhum outro jogador real online.</div>')}
+function loop(t){requestAnimationFrame(loop);if(!state.started){ren.render(scene,cam);return}let dt=.016,sp=state.keys.has('ShiftLeft')?18:10,fw=new THREE.Vector3(Math.sin(state.yaw),0,Math.cos(state.yaw)),rt=new THREE.Vector3(Math.cos(state.yaw),0,-Math.sin(state.yaw)),mv=new THREE.Vector3();if(state.keys.has('KeyW')||state.keys.has('ArrowUp'))mv.add(fw);if(state.keys.has('KeyS')||state.keys.has('ArrowDown'))mv.sub(fw);if(state.keys.has('KeyD')||state.keys.has('ArrowRight'))mv.add(rt);if(state.keys.has('KeyA')||state.keys.has('ArrowLeft'))mv.sub(rt);if(mv.length())state.pos.add(mv.normalize().multiplyScalar(sp*dt));state.safe=inSafe();if(!state.safe){state.food=Math.max(0,state.food-dt*.8);state.water=Math.max(0,state.water-dt*1)}if(zombies.length<10&&Math.random()<.006)spawnZ();zombies.forEach(z=>{if(z.stun>0){z.stun-=dt;return}let to=state.pos.clone().sub(z.mesh.position);let d=to.length();if(d<55&&!state.safe){z.mesh.position.add(to.normalize().multiplyScalar(4.5*dt));z.mesh.lookAt(state.pos.x,0,state.pos.z);if(d<1.8)state.hp=Math.max(0,state.hp-dt*10)}});cam.position.copy(state.pos);cam.position.y=2;cam.rotation.order='YXZ';cam.rotation.y=state.yaw;cam.rotation.x=state.pitch;if(t%120<20)send({type:'state',player:payload()});state.net.forEach((p,id)=>{if(performance.now()-(p.t||0)>16000){state.net.delete(id);let m=remoteMeshes.get(id);if(m)scene.remove(m);remoteMeshes.delete(id)}});$('hp').style.width=state.hp+'%';$('food').style.width=state.food+'%';$('water').style.width=state.water+'%';$('zone').textContent=state.safe?'SAFE':'WILD';$('zone').className=state.safe?'safe':'wild';$('online').textContent=1+state.net.size;$('zc').textContent=zombies.length;ren.render(scene,cam)}
+addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab'].includes(e.code))e.preventDefault();if(e.code==='Escape')document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open'));if(e.code==='Tab'){$('inv').classList.toggle('open');renderInv();return}if(e.code==='KeyM'){$('map').classList.toggle('open');mapDraw();return}if(e.code==='KeyJ')$('chat').classList.toggle('open');if(e.code==='Comma')$('kits').classList.toggle('open');if(e.code==='KeyE'||e.code==='KeyF')collect();if(e.code.startsWith('Digit')){let n=+e.code.slice(5)-1;if(slots[n]){state.sel=n;renderInv()}}state.keys.add(e.code)});addEventListener('keyup',e=>state.keys.delete(e.code));addEventListener('mousemove',e=>{if(document.pointerLockElement){state.yaw-=e.movementX*.0025;state.pitch=Math.max(-1.2,Math.min(1.2,state.pitch-e.movementY*.0025))}});addEventListener('mousedown',e=>{if(state.started&&e.button===0)shoot()});addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.t).classList.add('active')});['shirt','skin'].forEach(id=>$(id).oninput=()=>{$('av').style.setProperty(id==='shirt'?'--shirt':'--skin',$(id).value)});$('ws').value=localStorage.ws||'';$('start').onclick=()=>{state.name=$('name').value||'Survivor';state.shirt=$('shirt').value;state.skin=$('skin').value;$('load').style.display='grid';setTimeout(()=>{$('menu').style.display='none';$('load').style.display='none';$('hud').style.display='flex';$('cross').style.display='block';state.started=true;ren.domElement.requestPointerLock();connect();msg('Entrou no BR-01 superleve')},500)};$('send').onclick=()=>{let v=$('chatin').value.trim();if(!v)return;$('chatin').value='';if(v==='/warp safe'){state.pos.set(safe.x,2,safe.z+2);addChat('Sistema','Warp SAFE usado');return}addChat(state.name,v);send({type:'chat',author:state.name,message:v})};document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{let n=Date.now();if(n-state.lastKit<300000)return msg('Kit em cooldown');state.lastKit=n;if(b.dataset.k==='starter'){inv.ammo+=24;inv.food++;inv.water++}if(b.dataset.k==='rifle'){inv.viper=1;inv.maplestrike=1;inv.ammoRifle+=80}if(b.dataset.k==='sniper'){inv.sniper=1;inv.ammoSniper+=12}renderInv();msg('Kit recebido')});renderInv();requestAnimationFrame(loop);
+</script></body></html>
